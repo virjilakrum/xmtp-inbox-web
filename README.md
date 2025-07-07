@@ -1,3 +1,8 @@
+![Status](https://img.shields.io/badge/Deprecated-brown)
+
+> [!CAUTION]
+> This repository is no longer maintained. Active development of our example web client has been moved to the [xmtp-js](https://github.com/xmtp/xmtp-js/tree/main/apps/xmtp.chat) repository.
+
 # XMTP Inbox web chat app
 
 ![Unit and Component Tests](https://github.com/xmtp-labs/xmtp-inbox-web/actions/workflows/tests.yml/badge.svg)
