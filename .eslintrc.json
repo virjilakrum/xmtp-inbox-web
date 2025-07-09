@@ -1,6 +1,6 @@
 {
   "root": true,
-  "extends": ["xmtp-web"],
+  "extends": ["@typescript-eslint/recommended", "prettier"],
   "parserOptions": {
     "project": "./tsconfig.json"
   },
