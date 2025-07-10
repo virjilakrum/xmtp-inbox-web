@@ -1,32 +1,12 @@
-import { useConversations } from "@xmtp/react-sdk";
-import { useEffect } from "react";
-import { useXmtpStore } from "../store/xmtp";
+import { useConversations } from "./useV3Hooks";
 
-const useListConversations = () => {
-  const setLoadingConversations = useXmtpStore(
-    (state) => state.setLoadingConversations,
-  );
-
-  useEffect(() => {
-    if (
-      "Notification" in window &&
-      window.Notification.permission === "default"
-    ) {
-      void window.Notification.requestPermission();
-    }
-  }, []);
-
-  const { conversations, isLoaded, isLoading, error } = useConversations();
-
-  useEffect(() => {
-    setLoadingConversations(isLoading);
-  }, [isLoading, setLoadingConversations]);
+export const useListConversations = () => {
+  const conversations = useConversations();
 
   return {
     conversations,
-    error,
-    isLoaded,
-    isLoading,
+    error: null,
+    isLoading: false,
   };
 };
 

@@ -1,28 +1,14 @@
-import { useConversation } from "@xmtp/react-sdk";
-import type { CachedConversationWithId } from "@xmtp/react-sdk";
-import { useEffect, useState } from "react";
-import { useXmtpStore } from "../store/xmtp";
+import { useConversation } from "./useV3Hooks";
+import { CachedConversationWithId } from "../types/xmtpV3Types";
 
-const useSelectedConversation = () => {
-  const [selectedConversation, setSelectedConversation] = useState<
-    CachedConversationWithId | undefined
-  >();
-  const { getCachedByTopic } = useConversation();
-  const conversationTopic = useXmtpStore((state) => state.conversationTopic);
+export const useSelectedConversation = () => {
+  const { conversation } = useConversation();
 
-  useEffect(() => {
-    const getSelectedConversation = async () => {
-      if (conversationTopic) {
-        const conversation = await getCachedByTopic(conversationTopic);
-        setSelectedConversation(conversation);
-      } else {
-        setSelectedConversation(undefined);
-      }
-    };
-    void getSelectedConversation();
-  }, [conversationTopic, getCachedByTopic]);
-
-  return selectedConversation;
+  return {
+    conversation: conversation as CachedConversationWithId | null,
+    isLoading: false,
+    error: null,
+  };
 };
 
 export default useSelectedConversation;

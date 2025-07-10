@@ -1,33 +1,20 @@
-import { type CachedConversation, useReplies } from "@xmtp/react-sdk";
-import { FullMessageController } from "../../../controllers/FullMessageController";
-import { useXmtpStore } from "../../../store/xmtp";
+import { CachedMessageWithId } from "../../../types/xmtpV3Types";
 
-export type ReplyThreadProps = {
-  conversation: CachedConversation;
-};
+interface ReplyThreadProps {
+  message: CachedMessageWithId;
+}
 
-export const ReplyThread: React.FC<ReplyThreadProps> = ({ conversation }) => {
-  const activeMessage = useXmtpStore((state) => state.activeMessage);
-  const replies = useReplies(activeMessage);
-
+const ReplyThread: React.FC<ReplyThreadProps> = ({ message }) => {
+  // TODO: Implement proper V3 reply thread logic
   return (
-    <div data-testid="replies-container" className="flex flex-col h-full">
-      {activeMessage ? (
-        <FullMessageController
-          key={activeMessage?.xmtpID}
-          message={activeMessage}
-          conversation={conversation}
-          isReply
-        />
-      ) : null}
-      {replies.map((msg) => (
-        <FullMessageController
-          key={msg.xmtpID}
-          message={msg}
-          conversation={conversation}
-          isReply
-        />
-      ))}
+    <div className="reply-thread">
+      <div className="reply-container">
+        {/* TODO: Implement proper reply thread rendering */}
+        <p>Reply Thread for message: {message.id}</p>
+      </div>
     </div>
   );
 };
+
+export { ReplyThread };
+export default ReplyThread;

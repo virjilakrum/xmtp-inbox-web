@@ -1,13 +1,15 @@
 import { Buffer } from "buffer";
 
-// polyfill Buffer
-window.Buffer = window.Buffer ?? Buffer;
+// Add Buffer to global scope
+globalThis.Buffer = Buffer;
 
-// ensure global
-window.global = window.global ?? window;
+// Ensure global is defined
+globalThis.global = globalThis.global ?? globalThis;
 
 // workaround for https://github.com/coinbase/coinbase-wallet-sdk/issues/874
 // TODO: remove when https://github.com/coinbase/coinbase-wallet-sdk/pull/940 is released (>3.7.1)
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-window.process = { env: {} };
+globalThis.process = { env: {} };
+
+export {};

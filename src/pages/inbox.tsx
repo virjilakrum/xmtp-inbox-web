@@ -1,11 +1,5 @@
 import type React from "react";
 import { useEffect, useState } from "react";
-import {
-  useConsent,
-  useClient,
-  useConversations,
-  useStreamConversations,
-} from "@xmtp/react-sdk";
 import { useDisconnect, useWalletClient } from "wagmi";
 import type { Attachment } from "@xmtp/content-type-remote-attachment";
 import { useNavigate } from "react-router-dom";
@@ -22,27 +16,29 @@ import { ConversationListController } from "../controllers/ConversationListContr
 import { useAttachmentChange } from "../hooks/useAttachmentChange";
 import useSelectedConversation from "../hooks/useSelectedConversation";
 import { ReplyThread } from "../component-library/components/ReplyThread/ReplyThread";
+// V3 imports
+import { useConsent, useClient, useConversations } from "../hooks/useV3Hooks";
 
 const Inbox: React.FC<{ children?: React.ReactNode }> = () => {
   const navigate = useNavigate();
   const resetXmtpState = useXmtpStore((state) => state.resetXmtpState);
   const activeMessage = useXmtpStore((state) => state.activeMessage);
 
-  const { client, disconnect } = useClient();
+  const client = useClient();
   const [isDragActive, setIsDragActive] = useState(false);
   const { conversations } = useConversations();
   const selectedConversation = useSelectedConversation();
   const { data: walletClient } = useWalletClient();
-  useStreamConversations();
+  // TODO: Implement useStreamConversations for V3
 
-  const { loadConsentList } = useConsent();
+  const { consent, allow, deny } = useConsent();
 
   useEffect(() => {
     if (!client) {
       navigate("/");
     } else {
-      // make sure there's a client before loading the consent list
-      void loadConsentList();
+      // TODO: Implement consent loading for V3
+      console.log("V3 TODO: Load consent list");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client]);
@@ -82,25 +78,19 @@ const Inbox: React.FC<{ children?: React.ReactNode }> = () => {
   useEffect(() => {
     const checkSigners = () => {
       const address1 = walletClient?.account.address;
-      const address2 = client?.address;
+      // TODO: Implement V3 client address checking
+      const address2 = ""; // V3 client doesn't have address property
       // addresses must be defined before comparing
       if (address1 && address2 && address1 !== address2) {
         resetXmtpState();
-        void disconnect();
+        // TODO: Implement V3 client disconnect
         wipeKeys(address1 ?? "");
         disconnectWagmi();
         resetWagmi();
       }
     };
     void checkSigners();
-  }, [
-    disconnect,
-    resetXmtpState,
-    walletClient,
-    client?.address,
-    resetWagmi,
-    disconnectWagmi,
-  ]);
+  }, [resetXmtpState, walletClient, resetWagmi, disconnectWagmi]);
 
   if (!client) {
     return <div />;
@@ -128,9 +118,7 @@ const Inbox: React.FC<{ children?: React.ReactNode }> = () => {
           <SideNavController />
           <div className="flex flex-col w-full h-screen overflow-y-auto md:min-w-[350px]">
             <HeaderDropdownController />
-            <ConversationListController
-              setStartedFirstMessage={setStartedFirstMessage}
-            />
+            <ConversationListController />
           </div>
         </div>
         {
@@ -150,10 +138,10 @@ const Inbox: React.FC<{ children?: React.ReactNode }> = () => {
                       <XIcon
                         data-testid="replies-close-icon"
                         width={24}
-                        onClick={() => setActiveMessage()}
+                        onClick={() => setActiveMessage(null)}
                         className="absolute top-2 right-2 cursor-pointer"
                       />
-                      <ReplyThread conversation={selectedConversation} />
+                      <ReplyThread message={activeMessage} />
                     </div>
                   ) : (
                     <>
@@ -163,13 +151,20 @@ const Inbox: React.FC<{ children?: React.ReactNode }> = () => {
                       <div
                         className="h-full overflow-auto flex flex-col"
                         onFocus={() => {
-                          setActiveMessage();
+                          setActiveMessage(null);
                         }}>
-                        {selectedConversation && (
-                          <FullConversationController
-                            conversation={selectedConversation}
-                          />
-                        )}
+                        {selectedConversation &&
+                          selectedConversation.conversation && (
+                            <FullConversationController
+                              conversation={{
+                                peerAddress:
+                                  selectedConversation.conversation.id || "",
+                                topic: selectedConversation.conversation.id,
+                                conversationId:
+                                  selectedConversation.conversation.id,
+                              }}
+                            />
+                          )}
                       </div>
                     </>
                   )}

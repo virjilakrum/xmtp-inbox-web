@@ -12,7 +12,7 @@ export const HeaderDropdownController = () => {
       recipientInput={recipientInput}
       onClick={() => {
         resetRecipient();
-        setConversationTopic();
+        setConversationTopic("");
         setStartedFirstMessage(true);
       }}
     />

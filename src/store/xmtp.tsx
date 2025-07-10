@@ -1,101 +1,130 @@
 import { create } from "zustand";
-import type { CachedMessageWithId } from "@xmtp/react-sdk";
-import type { ETHAddress } from "../helpers";
+import { CachedMessageWithId } from "../types/xmtpV3Types";
 
-export type RecipientState = "invalid" | "loading" | "error" | "valid";
+export type ActiveTab =
+  | "inbox"
+  | "messages"
+  | "settings"
+  | "requests"
+  | "blocked";
 
-export type ActiveTab = "messages" | "requests" | "blocked";
+export type RecipientState = "loading" | "valid" | "invalid" | "error";
 
-export type RecipientAddress = ETHAddress | null;
-
-interface XmtpState {
-  loadingConversations: boolean;
-  setLoadingConversations: (loadingConversations: boolean) => void;
-  clientName: string | null;
-  setClientName: (name: string | null) => void;
-  clientAvatar: string | null;
-  setClientAvatar: (avatar: string | null) => void;
+interface XmtpStore {
+  conversationTopic: string;
+  setConversationTopic: (topic: string) => void;
+  recipientWalletAddress: string;
+  setRecipientWalletAddress: (address: string) => void;
   recipientInput: string;
   setRecipientInput: (input: string) => void;
-  recipientAddress: RecipientAddress;
-  setRecipientAddress: (address: RecipientAddress) => void;
-  recipientName: string | null;
-  setRecipientName: (address: string | null) => void;
-  recipientAvatar: string | null;
-  setRecipientAvatar: (avatar: string | null) => void;
-  recipientState: RecipientState;
-  setRecipientState: (state: RecipientState) => void;
+  recipientAddress: string;
+  setRecipientAddress: (address: string) => void;
+  recipientName: string;
+  setRecipientName: (name: string) => void;
+  recipientAvatar: string;
+  setRecipientAvatar: (avatar: string) => void;
   recipientOnNetwork: boolean;
   setRecipientOnNetwork: (onNetwork: boolean) => void;
-  conversationTopic?: string;
-  setConversationTopic: (conversationTopic?: string) => void;
-  resetXmtpState: () => void;
-  resetRecipient: () => void;
-  startedFirstMessage: boolean;
-  setStartedFirstMessage: (startedFirstMessage: boolean) => void;
-  attachmentError: string;
-  setAttachmentError: (attachmentError: string) => void;
-  activeMessage?: CachedMessageWithId;
-  setActiveMessage: (message?: CachedMessageWithId) => void;
+  recipientInputMode: "input" | "scan";
+  setRecipientInputMode: (mode: "input" | "scan") => void;
+  recipientState: RecipientState;
+  setRecipientState: (state: RecipientState) => void;
+  loadingConversations: boolean;
+  setLoadingConversations: (loading: boolean) => void;
+  consentState: "unknown" | "allowed" | "denied";
+  setConsentState: (state: "unknown" | "allowed" | "denied") => void;
+  previewMessage: CachedMessageWithId | null;
+  setPreviewMessage: (message: CachedMessageWithId | null) => void;
+
+  // Added missing properties
   activeTab: ActiveTab;
-  setActiveTab: (activeTab: ActiveTab) => void;
-  changedConsentCount: number;
-  setChangedConsentCount: (changedConsentCount: number) => void;
+  setActiveTab: (tab: ActiveTab) => void;
+  activeMessage: CachedMessageWithId | null;
+  setActiveMessage: (message: CachedMessageWithId | null) => void;
+  startedFirstMessage: boolean;
+  setStartedFirstMessage: (started: boolean) => void;
+  clientName: string;
+  setClientName: (name: string) => void;
+  clientAvatar: string;
+  setClientAvatar: (avatar: string) => void;
+  attachmentError: string | null;
+  setAttachmentError: (error: string | null) => void;
+
+  // Utility functions
+  resetRecipient: () => void;
+  resetXmtpState: () => void;
 }
 
-export const useXmtpStore = create<XmtpState>((set) => ({
-  loadingConversations: true,
-  setLoadingConversations: (loadingConversations: boolean) =>
-    set(() => ({ loadingConversations })),
-  clientName: null,
-  setClientName: (name) => set(() => ({ clientName: name })),
-  clientAvatar: null,
-  setClientAvatar: (avatar) => set(() => ({ clientAvatar: avatar })),
-  recipientInput: "",
-  setRecipientInput: (input) => set(() => ({ recipientInput: input })),
-  recipientAddress: null,
-  setRecipientAddress: (address) => set(() => ({ recipientAddress: address })),
-  recipientName: null,
-  setRecipientName: (name) => set(() => ({ recipientName: name })),
-  recipientAvatar: null,
-  setRecipientAvatar: (avatar) => set(() => ({ recipientAvatar: avatar })),
-  recipientState: "invalid",
-  setRecipientState: (state) => set(() => ({ recipientState: state })),
-  recipientOnNetwork: false,
-  setRecipientOnNetwork: (onNetwork) =>
-    set(() => ({ recipientOnNetwork: onNetwork })),
+export const useXmtpStore = create<XmtpStore>((set) => ({
   conversationTopic: "",
-  setConversationTopic: (conversationTopic) =>
-    set(() => ({ conversationTopic })),
-  resetXmtpState: () =>
-    set(() => ({
-      client: undefined,
-      recipientInput: "",
-      recipientAddress: null,
-      recipientName: null,
-      recipientAvatar: null,
-      recipientState: "invalid",
-      conversationTopic: undefined,
-      startedFirstMessage: false,
-    })),
-  resetRecipient: () =>
-    set(() => ({
-      recipientInput: "",
-      recipientAddress: null,
-      recipientName: null,
-      recipientAvatar: null,
-      recipientState: "invalid",
-    })),
+  setConversationTopic: (topic) => set({ conversationTopic: topic }),
+  recipientWalletAddress: "",
+  setRecipientWalletAddress: (address) =>
+    set({ recipientWalletAddress: address }),
+  recipientInput: "",
+  setRecipientInput: (input) => set({ recipientInput: input }),
+  recipientAddress: "",
+  setRecipientAddress: (address) => set({ recipientAddress: address }),
+  recipientName: "",
+  setRecipientName: (name) => set({ recipientName: name }),
+  recipientAvatar: "",
+  setRecipientAvatar: (avatar) => set({ recipientAvatar: avatar }),
+  recipientOnNetwork: false,
+  setRecipientOnNetwork: (onNetwork) => set({ recipientOnNetwork: onNetwork }),
+  recipientInputMode: "input",
+  setRecipientInputMode: (mode) => set({ recipientInputMode: mode }),
+  recipientState: "loading",
+  setRecipientState: (state) => set({ recipientState: state }),
+  loadingConversations: false,
+  setLoadingConversations: (loading) => set({ loadingConversations: loading }),
+  consentState: "unknown",
+  setConsentState: (state) => set({ consentState: state }),
+  previewMessage: null,
+  setPreviewMessage: (message) => set({ previewMessage: message }),
+
+  // Added missing properties
+  activeTab: "inbox",
+  setActiveTab: (tab) => set({ activeTab: tab }),
+  activeMessage: null,
+  setActiveMessage: (message) => set({ activeMessage: message }),
   startedFirstMessage: false,
-  setStartedFirstMessage: (startedFirstMessage) =>
-    set(() => ({ startedFirstMessage })),
-  attachmentError: "",
-  setAttachmentError: (attachmentError) => set(() => ({ attachmentError })),
-  activeMessage: undefined,
-  setActiveMessage: (activeMessage) => set(() => ({ activeMessage })),
-  activeTab: "messages",
-  setActiveTab: (activeTab) => set(() => ({ activeTab })),
-  changedConsentCount: 0,
-  setChangedConsentCount: (changedConsentCount) =>
-    set(() => ({ changedConsentCount })),
+  setStartedFirstMessage: (started) => set({ startedFirstMessage: started }),
+  clientName: "",
+  setClientName: (name) => set({ clientName: name }),
+  clientAvatar: "",
+  setClientAvatar: (avatar) => set({ clientAvatar: avatar }),
+  attachmentError: null,
+  setAttachmentError: (error) => set({ attachmentError: error }),
+
+  // Utility functions
+  resetRecipient: () =>
+    set({
+      recipientWalletAddress: "",
+      recipientInput: "",
+      recipientAddress: "",
+      recipientName: "",
+      recipientAvatar: "",
+      recipientOnNetwork: false,
+      recipientInputMode: "input",
+      recipientState: "loading",
+    }),
+  resetXmtpState: () =>
+    set({
+      conversationTopic: "",
+      recipientWalletAddress: "",
+      recipientInput: "",
+      recipientAddress: "",
+      recipientName: "",
+      recipientAvatar: "",
+      recipientOnNetwork: false,
+      recipientInputMode: "input",
+      recipientState: "loading",
+      loadingConversations: false,
+      consentState: "unknown",
+      previewMessage: null,
+      activeTab: "inbox",
+      activeMessage: null,
+      startedFirstMessage: false,
+      attachmentError: null,
+    }),
 }));

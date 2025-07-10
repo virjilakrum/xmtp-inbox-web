@@ -55,7 +55,7 @@ export const HeaderDropdown = ({
             onClick={() => {
               setActiveTab(name);
               resetRecipient();
-              setConversationTopic();
+              setConversationTopic("");
             }}>
             {t(`consent.${name}`)}
           </button>

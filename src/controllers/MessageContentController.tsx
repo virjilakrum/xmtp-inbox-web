@@ -5,15 +5,15 @@ import type { MouseEvent } from "react";
 import { ContentTypeRemoteAttachment } from "@xmtp/content-type-remote-attachment";
 import type { Reply } from "@xmtp/content-type-reply";
 import { ContentTypeReply } from "@xmtp/content-type-reply";
-import {
-  ContentTypeId,
-  type CachedMessage,
-  ContentTypeText,
-} from "@xmtp/react-sdk";
+import { ContentTypeText } from "@xmtp/content-type-text";
+import type { ContentTypeId } from "@xmtp/content-type-primitives";
 import RemoteAttachmentMessageTile from "../component-library/components/RemoteAttachmentMessageTile/RemoteAttachmentMessageTile";
+// V3 imports
+import type { CachedMessageWithId } from "../types/xmtpV3Types";
+import { DecodedMessage } from "@xmtp/browser-sdk";
 
 interface MessageContentControllerProps {
-  message: CachedMessage;
+  message: CachedMessageWithId;
   isSelf: boolean;
 }
 
@@ -26,10 +26,29 @@ const MessageContentController = ({
     shortcodes: ["emojibase"],
   });
 
-  const contentType = ContentTypeId.fromString(message.contentType);
+  // V3 DecodedMessage has content, contentType, and fallback properties directly
+  const messageContent = message.message?.content;
+  const contentType = message.message?.contentType;
+  const fallback = message.message?.fallback;
 
-  if (contentType.sameAs(ContentTypeText)) {
-    const content = message.content as string;
+  // Check content type using the V3 ContentTypeId structure
+  const isTextType =
+    contentType?.authorityId === "xmtp.org" &&
+    contentType?.typeId === "text" &&
+    contentType?.versionMajor === 1;
+
+  const isRemoteAttachmentType =
+    contentType?.authorityId === "xmtp.org" &&
+    contentType?.typeId === "remoteStaticAttachment" &&
+    contentType?.versionMajor === 1;
+
+  const isReplyType =
+    contentType?.authorityId === "xmtp.org" &&
+    contentType?.typeId === "reply" &&
+    contentType?.versionMajor === 1;
+
+  if (isTextType) {
+    const content = messageContent as string;
     return (
       <span className="interweave-content" data-testid="message-tile-text">
         <Interweave
@@ -56,24 +75,28 @@ const MessageContentController = ({
     );
   }
 
-  if (contentType.sameAs(ContentTypeRemoteAttachment)) {
-    return <RemoteAttachmentMessageTile message={message} isSelf={isSelf} />;
+  if (isRemoteAttachmentType) {
+    return <RemoteAttachmentMessageTile message={message} />;
   }
 
-  if (contentType.sameAs(ContentTypeReply)) {
-    const reply = message.content as Reply;
-    const newMessage = {
+  if (isReplyType) {
+    const reply = messageContent as Reply;
+    // Create a new message object with reply content for recursive rendering
+    const newMessage: CachedMessageWithId = {
       ...message,
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      content: reply.content,
-      contentType: new ContentTypeId(reply.contentType).toString(),
+      message: {
+        ...message.message,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        content: reply.content,
+        contentType: reply.contentType,
+      } as DecodedMessage, // Type assertion to avoid private property issues
     };
 
     return <MessageContentController message={newMessage} isSelf={isSelf} />;
   }
 
   // message content type not supported, display fallback
-  return <span>{message.contentFallback}</span>;
+  return <span>{fallback}</span>;
 };
 
 export default MessageContentController;

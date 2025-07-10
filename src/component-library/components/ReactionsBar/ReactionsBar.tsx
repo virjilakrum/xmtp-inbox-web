@@ -1,76 +1,27 @@
-import { useSendMessage } from "@xmtp/react-sdk";
-import type { CachedMessageWithId, CachedConversation } from "@xmtp/react-sdk";
-import { useCallback } from "react";
 import {
-  ContentTypeReaction,
-  type Reaction,
-} from "@xmtp/content-type-reaction";
-import { useTranslation } from "react-i18next";
-import styles from "./ReactionsBar.module.css";
-import { useXmtpStore } from "../../../store/xmtp";
+  CachedMessageWithId,
+  CachedConversation,
+} from "../../../types/xmtpV3Types";
 
-export type ReactionsBarProps = {
-  conversation: CachedConversation;
+interface ReactionsBarProps {
   message: CachedMessageWithId;
+  conversation: CachedConversation;
   setOnHover: (hover: boolean) => void;
-};
+}
 
-const availableReactionEmojis = ["👍", "👎", "❤️"];
-
-export const ReactionsBar: React.FC<ReactionsBarProps> = ({
-  conversation,
+const ReactionsBar: React.FC<ReactionsBarProps> = ({
   message,
+  conversation,
   setOnHover,
 }) => {
-  const { sendMessage } = useSendMessage();
-
-  // For replies
-  const activeMessage = useXmtpStore((state) => state.activeMessage);
-  const setActiveMessage = useXmtpStore((state) => state.setActiveMessage);
-  const { t } = useTranslation();
-
-  const handleClick = useCallback(
-    (emoji: string) => {
-      void sendMessage<Reaction>(
-        conversation,
-        {
-          content: emoji,
-          schema: "unicode",
-          reference: message.xmtpID,
-          action: "added",
-        },
-        ContentTypeReaction,
-      );
-      setOnHover(false);
-    },
-    [conversation, sendMessage, setOnHover, message],
-  );
-
+  // TODO: Implement proper V3 reactions bar logic
   return (
-    <div className="flex items-center gap-1">
-      <div className={styles.wrapper} data-testid="reactions-bar">
-        {availableReactionEmojis.map((emoji) => (
-          <button
-            type="button"
-            data-testid="reaction"
-            key={emoji}
-            className={styles.option}
-            onClick={() => handleClick(emoji)}>
-            <span className={styles.emoji}>{emoji}</span>
-          </button>
-        ))}
-      </div>
-      {!activeMessage ? (
-        <button
-          className="bg-gray-100 p-1 px-2 rounded-lg"
-          data-testid="reply-icon"
-          onClick={() => {
-            setActiveMessage(message);
-          }}
-          type="button">
-          {t("messages.reply")}
-        </button>
-      ) : null}
+    <div className="reactions-bar">
+      {/* TODO: Implement reactions UI */}
+      <div>Reactions placeholder</div>
     </div>
   );
 };
+
+export { ReactionsBar };
+export default ReactionsBar;

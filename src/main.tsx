@@ -5,36 +5,17 @@ import "@rainbow-me/rainbowkit/styles.css";
 import { RainbowKitProvider } from "@rainbow-me/rainbowkit";
 import { WagmiProvider } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  attachmentContentTypeConfig,
-  reactionContentTypeConfig,
-  replyContentTypeConfig,
-  XMTPProvider,
-} from "@xmtp/react-sdk";
+// V3 imports
 import {
   ContentTypeScreenEffect,
   ScreenEffectCodec,
 } from "@xmtp/experimental-content-type-screen-effect";
 import App from "./controllers/AppController";
 import { getWagmiConfig } from "./helpers/config";
+import { XmtpV3Provider } from "./context/XmtpV3Provider";
 
-// Increment with any schema change; e.g. adding support for a new content type
-const DB_VERSION = 6;
-
+// Content type configurations for V3
 export const ScreenEffectCodecInstance = new ScreenEffectCodec();
-
-const customConfig = {
-  codecs: [ScreenEffectCodecInstance],
-  contentTypes: [ContentTypeScreenEffect.toString()],
-  namespace: "screenEffects",
-};
-
-const contentTypeConfigs = [
-  attachmentContentTypeConfig,
-  reactionContentTypeConfig,
-  replyContentTypeConfig,
-  customConfig,
-];
 
 const queryClient = new QueryClient();
 
@@ -43,11 +24,9 @@ createRoot(document.getElementById("root") as HTMLElement).render(
     <QueryClientProvider client={queryClient}>
       <RainbowKitProvider>
         <StrictMode>
-          <XMTPProvider
-            contentTypeConfigs={contentTypeConfigs}
-            dbVersion={DB_VERSION}>
+          <XmtpV3Provider>
             <App />
-          </XMTPProvider>
+          </XmtpV3Provider>
         </StrictMode>
       </RainbowKitProvider>
     </QueryClientProvider>

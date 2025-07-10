@@ -1,5 +1,3 @@
-import type { CachedConversation, CachedMessageWithId } from "@xmtp/react-sdk";
-import { useClient } from "@xmtp/react-sdk";
 import { FramesClient } from "@xmtp/frames-client";
 import { useEffect, useState } from "react";
 import type {
@@ -13,6 +11,25 @@ import { useXmtpStore } from "../store/xmtp";
 import { Frame } from "../component-library/components/Frame/Frame";
 import { readMetadata } from "../helpers/openFrames";
 import { getFrameTitle, isValidFrame, isXmtpFrame } from "../helpers/frameInfo";
+// V3 imports
+import { useClient } from "../hooks/useV3Hooks";
+
+// V3 types
+type CachedConversation = {
+  peerAddress: string;
+  topic?: string;
+  conversationId?: string;
+};
+
+type CachedMessageWithId = {
+  xmtpID: string;
+  content: any;
+  senderAddress: string;
+  sentAt: Date;
+  uuid: string;
+  id: string;
+  conversationTopic?: string;
+};
 
 interface FullMessageControllerProps {
   message: CachedMessageWithId;
@@ -25,7 +42,7 @@ export const FullMessageController = ({
   conversation,
   isReply,
 }: FullMessageControllerProps) => {
-  const { client } = useClient();
+  const client = useClient(); // V3 client
 
   const conversationTopic = useXmtpStore((state) => state.conversationTopic);
 
@@ -50,32 +67,35 @@ export const FullMessageController = ({
 
     setFrameButtonUpdating(buttonIndex);
 
-    const framesClient = new FramesClient(client);
+    // TODO: Update FramesClient for V3 - this may need adjustment
+    // const framesClient = new FramesClient(client);
     const postUrl =
       button.target || button.postUrl || frameInfo.postUrl || frameUrl;
-    const payload = await framesClient.signFrameAction({
-      frameUrl,
-      inputText: textInputValue || undefined,
-      buttonIndex,
-      conversationTopic: conversationTopic as string,
-      participantAccountAddresses: [client.address, conversation.peerAddress],
-    });
 
-    if (action === "post") {
-      const updatedFrameMetadata = await framesClient.proxy.post(
-        postUrl,
-        payload,
-      );
-      setFrameMetadata(updatedFrameMetadata);
-    } else if (action === "post_redirect") {
-      const { redirectedTo } = await framesClient.proxy.postRedirect(
-        postUrl,
-        payload,
-      );
-      window.open(redirectedTo, "_blank");
-    } else if (action === "link" && button?.target) {
-      window.open(button.target, "_blank");
-    }
+    // TODO: Implement V3 frame signing
+    // const payload = await framesClient.signFrameAction({
+    //   frameUrl,
+    //   inputText: textInputValue || undefined,
+    //   buttonIndex,
+    //   conversationTopic: conversationTopic as string,
+    //   participantAccountAddresses: [client.address, conversation.peerAddress],
+    // });
+
+    // if (action === "post") {
+    //   const updatedFrameMetadata = await framesClient.proxy.post(
+    //     postUrl,
+    //     payload,
+    //   );
+    //   setFrameMetadata(updatedFrameMetadata);
+    // } else if (action === "post_redirect") {
+    //   const { redirectedTo } = await framesClient.proxy.postRedirect(
+    //     postUrl,
+    //     payload,
+    //   );
+    //   window.open(redirectedTo, "_blank");
+    // } else if (action === "link" && button?.target) {
+    //   window.open(button.target, "_blank");
+    // }
     setFrameButtonUpdating(0);
   };
 
@@ -101,8 +121,11 @@ export const FullMessageController = ({
   }, [message?.content]);
 
   const recipientName = useXmtpStore((s) => s.recipientName);
+
+  // TODO: Update for V3 - get client address from inbox ID or identity
+  const clientAddress = ""; // client?.inboxId or similar
   const alignmentStyles =
-    client?.address === message.senderAddress
+    clientAddress === message.senderAddress
       ? "items-end justify-end"
       : "items-start justify-start";
 
@@ -121,12 +144,12 @@ export const FullMessageController = ({
         key={message.xmtpID}
         from={{
           displayAddress: recipientName ?? shortAddress(message.senderAddress),
-          isSelf: client?.address === message.senderAddress,
+          isSelf: clientAddress === message.senderAddress,
         }}
         datetime={message.sentAt}>
         <MessageContentController
           message={message}
-          isSelf={client?.address === message.senderAddress}
+          isSelf={clientAddress === message.senderAddress}
         />
       </FullMessage>
       {showFrame && (

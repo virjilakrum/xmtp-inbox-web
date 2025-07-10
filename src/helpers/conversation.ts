@@ -1,8 +1,4 @@
-import {
-  updateConversationMetadata,
-  type CachedConversation,
-} from "@xmtp/react-sdk";
-import type Dexie from "dexie";
+// V3 conversation helper - simplified since V3 manages database automatically
 import type { ETHAddress } from "./string";
 import {
   throttledFetchUnsNames,
@@ -12,6 +8,18 @@ import {
 } from "./string";
 import { chunkArray } from "./functions";
 import { getWagmiConfig } from "./config";
+
+// V3 conversation type
+type CachedConversation = {
+  peerAddress: string;
+  topic?: string;
+  conversationId?: string;
+  metadata?: {
+    peerAddressName?: string;
+    peerAddressAvatar?: string;
+  };
+  walletAddress?: string;
+};
 
 export type PeerAddressAvatar = string | null;
 export type PeerAddressName = string | null;
@@ -47,25 +55,20 @@ export const fetchPeerAddressName = async (
 };
 
 /**
- * Set the peer address name in a conversation
+ * Set the peer address name in a conversation (V3 simplified)
  *
  * @param name The name for the peer address
  * @param conversation The conversation
- * @param db DB instance
+ * @param db V3 client (database managed automatically)
  */
 export const setPeerAddressName = async (
   name: string | null,
   conversation: CachedConversation,
-  db: Dexie,
+  db: any, // V3 client
 ) => {
-  // store peer address name in conversation metadata
-  await updateConversationMetadata(
-    conversation.walletAddress,
-    conversation.topic,
-    "peerAddressName",
-    name,
-    db,
-  );
+  // TODO: Implement V3 conversation metadata storage
+  // V3 manages database automatically, may need different approach
+  console.log("V3 TODO: Store peer address name", { name, conversation });
 };
 
 /**
@@ -101,34 +104,29 @@ export const fetchPeerAddressAvatar = async (
 };
 
 /**
- * Set the peer address name in a conversation
+ * Set the peer address avatar in a conversation (V3 simplified)
  *
  * @param avatar The avatar for the peer address
  * @param conversation The conversation
- * @param db DB instance
+ * @param db V3 client (database managed automatically)
  */
 export const setPeerAddressAvatar = async (
   avatar: string | null,
   conversation: CachedConversation,
-  db: Dexie,
+  db: any, // V3 client
 ) => {
-  // store peer address avatar in conversation metadata
-  await updateConversationMetadata(
-    conversation.walletAddress,
-    conversation.topic,
-    "peerAddressAvatar",
-    avatar,
-    db,
-  );
+  // TODO: Implement V3 conversation metadata storage
+  // V3 manages database automatically, may need different approach
+  console.log("V3 TODO: Store peer address avatar", { avatar, conversation });
 };
 
 /**
  * Given a conversation, lookup and update the identity of the conversation
- * peer address.
+ * peer address. (V3 simplified)
  */
 export const updateConversationIdentity = async (
   conversation: CachedConversation,
-  db: Dexie,
+  db: any, // V3 client
 ) => {
   const name = await fetchPeerAddressName(conversation);
   if (name) {
@@ -143,11 +141,11 @@ export const updateConversationIdentity = async (
 
 /**
  * Given an array of conversations, lookup and update the identities of the
- * conversation peer addresses.
+ * conversation peer addresses. (V3 simplified)
  */
 export const updateConversationIdentities = async (
   conversations: CachedConversation[],
-  db: Dexie,
+  db: any, // V3 client
 ) => {
   // key the conversations by peer address for easy lookup
   const conversationsWithoutNameMap = conversations.reduce(
@@ -169,7 +167,7 @@ export const updateConversationIdentities = async (
   const addressesWithoutNames = Object.keys(
     conversationsWithoutNameMap,
   ) as ETHAddress[];
-  const resolvedAddresses: { [address: string]: string } = {};
+
   // make sure we have addresses to lookup
   if (addressesWithoutNames.length > 0) {
     // first check for UNS names first since we can do a bulk lookup
@@ -186,6 +184,7 @@ export const updateConversationIdentities = async (
     const unresolvedAddresses: ETHAddress[] = addressesWithoutNames.filter(
       (address) => !unsAddresses.includes(address),
     );
+
     // since there's no bulk lookup for ENS names, we batch the lookups in
     // groups of 10
     // eslint-disable-next-line no-restricted-syntax
@@ -202,68 +201,11 @@ export const updateConversationIdentities = async (
             address,
           });
           if (name) {
-            resolvedAddresses[address] = name;
             const addressConversations = conversationsWithoutNameMap[address];
-            await Promise.all(
-              addressConversations.map((convo) =>
-                setPeerAddressName(name, convo, db),
-              ),
-            );
+            addressConversations.forEach((convo) => {
+              void setPeerAddressName(name, convo, db);
+            });
           }
-        }),
-      );
-    }
-  }
-  // key the conversations by ENS name for easy lookup
-  const conversationsWithoutAvatarMap = conversations.reduce(
-    (result, conversation) => {
-      const name =
-        // check cache
-        getCachedPeerAddressName(conversation) ??
-        // check recently resolved ENS addresses
-        resolvedAddresses[conversation.peerAddress];
-      // make sure there's a valid ENS name first
-      if (!name) {
-        return result;
-      }
-      // check if conversation already has peer identity metadata
-      const avatar = getCachedPeerAddressAvatar(conversation);
-      // skip conversations with avatar
-      return avatar
-        ? result
-        : {
-            ...result,
-            [name]: (result[name] ?? []).concat(conversation),
-          };
-    },
-    {} as { [peerName: string]: CachedConversation[] },
-  );
-  const namesWithoutAvatars = Object.keys(
-    conversationsWithoutAvatarMap,
-  ) as ETHAddress[];
-  // make sure we have addresses to lookup
-  if (namesWithoutAvatars.length > 0) {
-    // since there's no bulk lookup for ENS avatars, we batch the lookups in
-    // groups of 10
-    // eslint-disable-next-line no-restricted-syntax
-    for (const chunk of chunkArray(namesWithoutAvatars, 10)) {
-      // this will yield to the event loop to prevent UI blocking
-      // eslint-disable-next-line no-await-in-loop
-      await new Promise((resolve) => {
-        requestAnimationFrame(resolve);
-      });
-      // eslint-disable-next-line no-await-in-loop
-      await Promise.all(
-        chunk.map(async (name) => {
-          const avatar = await throttledFetchEnsAvatar(getWagmiConfig(), {
-            name,
-          });
-          const addressConversations = conversationsWithoutAvatarMap[name];
-          await Promise.all(
-            addressConversations.map((convo) =>
-              setPeerAddressAvatar(avatar, convo, db),
-            ),
-          );
         }),
       );
     }

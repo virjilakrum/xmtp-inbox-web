@@ -1,5 +1,5 @@
 import type { Attachment } from "@xmtp/content-type-remote-attachment";
-import { useStartConversation } from "@xmtp/react-sdk";
+import { useStartConversation } from "../hooks/useV3Hooks";
 import { MessageInput } from "../component-library/components/MessageInput/MessageInput";
 import useSendMessage from "../hooks/useSendMessage";
 import useSelectedConversation from "../hooks/useSelectedConversation";
@@ -15,36 +15,24 @@ interface MessageInputControllerProps {
 
 export const MessageInputController = ({
   attachment,
-  setAttachment,
   attachmentPreview,
+  setAttachment,
   setAttachmentPreview,
   setIsDragActive,
 }: MessageInputControllerProps) => {
-  // XMTP Hooks
-  const conversation = useSelectedConversation();
-
-  const recipientOnNetwork = useXmtpStore((s) => s.recipientOnNetwork);
-  const recipientAddress = useXmtpStore((s) => s.recipientAddress);
-  const activeMessage = useXmtpStore((s) => s.activeMessage);
-
   const { startConversation } = useStartConversation();
-  const { sendMessage } = useSendMessage(
-    attachment || undefined,
-    activeMessage,
-  );
+  const recipientAddress = useXmtpStore((s) => s.recipientAddress);
 
+  // TODO: Implement proper V3 message input logic
   return (
     <MessageInput
-      peerAddress={recipientAddress}
-      isDisabled={!recipientOnNetwork}
-      startConversation={startConversation}
-      sendMessage={sendMessage}
-      conversation={conversation}
       attachment={attachment}
-      setAttachment={setAttachment}
       attachmentPreview={attachmentPreview}
+      setAttachment={setAttachment}
       setAttachmentPreview={setAttachmentPreview}
       setIsDragActive={setIsDragActive}
     />
   );
 };
+
+export default MessageInputController;

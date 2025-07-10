@@ -1,16 +1,32 @@
 import { ContentTypeRemoteAttachment } from "@xmtp/content-type-remote-attachment";
-import type { CachedMessageWithId } from "@xmtp/react-sdk";
-import { ContentTypeId, ContentTypeText } from "@xmtp/react-sdk";
 import { ContentTypeScreenEffect } from "@xmtp/experimental-content-type-screen-effect";
+import { ContentTypeText } from "@xmtp/content-type-text";
+import type { ContentTypeId } from "@xmtp/content-type-primitives";
+
+// V3 message type
+type CachedMessageWithId = {
+  xmtpID: string;
+  content: any;
+  contentType: string;
+  senderAddress: string;
+  sentAt: Date;
+  uuid: string;
+  id: string;
+  conversationTopic?: string;
+  contentFallback?: string;
+};
 
 /**
  * Determines if a message is supported by the app
  */
 export const isMessageSupported = (message: CachedMessageWithId) => {
-  const contentType = ContentTypeId.fromString(message.contentType);
+  // TODO: Update for V3 ContentTypeId handling
+  // For now, check the contentType string directly
+  const contentTypeString = message.contentType;
+
   return (
-    contentType.sameAs(ContentTypeText) ||
-    contentType.sameAs(ContentTypeRemoteAttachment) ||
-    contentType.sameAs(ContentTypeScreenEffect)
+    contentTypeString === ContentTypeText.toString() ||
+    contentTypeString === ContentTypeRemoteAttachment.toString() ||
+    contentTypeString === ContentTypeScreenEffect.toString()
   );
 };
