@@ -9,14 +9,30 @@ export interface CachedMessageWithId {
   id: string;
   message: DecodedMessage;
   conversation: Conversation;
-  // TODO: Add proper V3 cached message properties
+  // V3 cached message properties
+  xmtpID?: string;
+  uuid?: string;
+  content?: any;
+  contentType?: any;
+  senderAddress?: string;
+  senderInboxId?: string;
+  sentAt?: Date;
+  sentAtNs?: string;
+  conversationTopic?: string;
+  contentFallback?: string;
 }
 
 // V3 equivalent of CachedMessage from V2
 export interface CachedMessage {
   id: string;
   message: DecodedMessage;
-  // TODO: Add proper V3 cached message properties
+  // V3 cached message properties
+  content?: any;
+  contentType?: any;
+  senderInboxId?: string;
+  sentAt?: Date;
+  sentAtNs?: string;
+  contentFallback?: string;
 }
 
 // V3 equivalent of CachedConversation from V2
@@ -32,7 +48,13 @@ export interface CachedConversation {
     peerAddressAvatar?: string;
   };
   walletAddress?: string;
-  // TODO: Add proper V3 cached conversation properties
+  // V3 cached conversation properties
+  createdAt?: Date;
+  lastMessage?: CachedMessage;
+  inboxId?: string;
+  isGroup?: boolean;
+  groupName?: string;
+  groupDescription?: string;
 }
 
 // V3 equivalent of CachedConversationWithId from V2
@@ -40,7 +62,17 @@ export interface CachedConversationWithId {
   id: string;
   conversation: Conversation;
   peerAddress: string;
-  // TODO: Add proper V3 cached conversation properties
+  // V3 cached conversation properties
+  topic?: string;
+  conversationId?: string;
+  metadata?: {
+    peerAddressName?: string;
+    peerAddressAvatar?: string;
+  };
+  createdAt?: Date;
+  lastMessage?: CachedMessage;
+  inboxId?: string;
+  isGroup?: boolean;
 }
 
 // DecodedMessage is imported from @xmtp/browser-sdk
@@ -50,7 +82,14 @@ export interface ClientOptions {
   env?: "dev" | "production" | "local";
   dbPath?: string;
   dbEncryptionKey?: Uint8Array;
-  // TODO: Add proper V3 client options
+  // V3 client options
+  enableV3?: boolean;
+  dbDirectory?: string;
+  inboxId?: string;
+  identityStrategy?: "create" | "restore";
+  codecRegistry?: any;
+  apiUrl?: string;
+  logLevel?: "debug" | "info" | "warn" | "error";
 }
 
 // V3 equivalent of ContentTypeId from V2

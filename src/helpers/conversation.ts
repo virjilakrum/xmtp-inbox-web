@@ -66,9 +66,31 @@ export const setPeerAddressName = async (
   conversation: CachedConversation,
   db: any, // V3 client
 ) => {
-  // TODO: Implement V3 conversation metadata storage
-  // V3 manages database automatically, may need different approach
-  console.log("V3 TODO: Store peer address name", { name, conversation });
+  // V3 conversation metadata storage using localStorage (simple approach)
+  // V3 client manages database automatically for messages, but metadata can be stored locally
+  try {
+    const metadataKey = `xmtp-v3-peer-name-${conversation.conversationId || conversation.peerAddress}`;
+    if (name) {
+      localStorage.setItem(metadataKey, name);
+      // Update conversation metadata in memory
+      if (conversation.metadata) {
+        conversation.metadata.peerAddressName = name;
+      } else {
+        conversation.metadata = { peerAddressName: name };
+      }
+    } else {
+      localStorage.removeItem(metadataKey);
+      if (conversation.metadata) {
+        conversation.metadata.peerAddressName = undefined;
+      }
+    }
+    console.log("V3 metadata: Stored peer address name", {
+      name,
+      conversation: conversation.conversationId || conversation.peerAddress,
+    });
+  } catch (error) {
+    console.error("V3 metadata: Error storing peer address name", error);
+  }
 };
 
 /**
@@ -115,9 +137,31 @@ export const setPeerAddressAvatar = async (
   conversation: CachedConversation,
   db: any, // V3 client
 ) => {
-  // TODO: Implement V3 conversation metadata storage
-  // V3 manages database automatically, may need different approach
-  console.log("V3 TODO: Store peer address avatar", { avatar, conversation });
+  // V3 conversation metadata storage using localStorage (simple approach)
+  // V3 client manages database automatically for messages, but metadata can be stored locally
+  try {
+    const metadataKey = `xmtp-v3-peer-avatar-${conversation.conversationId || conversation.peerAddress}`;
+    if (avatar) {
+      localStorage.setItem(metadataKey, avatar);
+      // Update conversation metadata in memory
+      if (conversation.metadata) {
+        conversation.metadata.peerAddressAvatar = avatar;
+      } else {
+        conversation.metadata = { peerAddressAvatar: avatar };
+      }
+    } else {
+      localStorage.removeItem(metadataKey);
+      if (conversation.metadata) {
+        conversation.metadata.peerAddressAvatar = undefined;
+      }
+    }
+    console.log("V3 metadata: Stored peer address avatar", {
+      avatar,
+      conversation: conversation.conversationId || conversation.peerAddress,
+    });
+  } catch (error) {
+    console.error("V3 metadata: Error storing peer address avatar", error);
+  }
 };
 
 /**

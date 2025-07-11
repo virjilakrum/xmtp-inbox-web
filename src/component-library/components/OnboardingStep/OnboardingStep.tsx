@@ -1,4 +1,5 @@
 import { useTranslation, Trans } from "react-i18next";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { Spinner } from "../Loaders/Spinner";
 import { ctaStep, stepMapping } from "./stepMapping";
 import { GhostButton } from "../GhostButton/GhostButton";
@@ -87,11 +88,17 @@ export const OnboardingStep = ({
                 testId="create-xmtp-identity-cta"
               />
             ) : cta === ctaStep.CONNECT ? (
-              <PillButton
-                label={t("onboarding.intro_button")}
-                onClick={onConnect}
-                testId="no-wallet-connected-cta"
-              />
+              <div data-testid="no-wallet-connected-cta">
+                <ConnectButton.Custom>
+                  {({ openConnectModal }) => (
+                    <PillButton
+                      label={t("onboarding.intro_button")}
+                      onClick={openConnectModal}
+                      testId="no-wallet-connected-cta"
+                    />
+                  )}
+                </ConnectButton.Custom>
+              </div>
             ) : null}
           </div>
           {step > 1 ? (

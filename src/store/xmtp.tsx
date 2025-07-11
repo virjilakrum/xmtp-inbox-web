@@ -83,7 +83,7 @@ export const useXmtpStore = create<XmtpStore>((set) => ({
   setPreviewMessage: (message) => set({ previewMessage: message }),
 
   // Added missing properties
-  activeTab: "inbox",
+  activeTab: "messages",
   setActiveTab: (tab) => set({ activeTab: tab }),
   activeMessage: null,
   setActiveMessage: (message) => set({ activeMessage: message }),
@@ -122,7 +122,7 @@ export const useXmtpStore = create<XmtpStore>((set) => ({
       loadingConversations: false,
       consentState: "unknown",
       previewMessage: null,
-      activeTab: "inbox",
+      activeTab: "messages",
       activeMessage: null,
       startedFirstMessage: false,
       attachmentError: null,

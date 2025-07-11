@@ -17,8 +17,18 @@ import useXmtpV3Client from "./useXmtpV3Client";
 type ClientStatus = "new" | "created" | "enabled";
 
 const useInitXmtpClientV3 = () => {
-  // XMTP V3 client state
-  const { client, isLoading, initialize, disconnect } = useXmtpV3Client();
+  // XMTP V3 client state with error handling
+  const {
+    client,
+    isLoading,
+    initialize,
+    disconnect,
+    isAddressInitialized: checkAddressInitialized,
+    error,
+    handleInstallationLimitError,
+    clearLocalData,
+    isInstallationLimitError,
+  } = useXmtpV3Client();
 
   // track if onboarding is in progress
   const onboardingRef = useRef(false);
@@ -32,10 +42,119 @@ const useInitXmtpClientV3 = () => {
   const setClientName = useXmtpStore((s) => s.setClientName);
   const setClientAvatar = useXmtpStore((s) => s.setClientAvatar);
 
-  // if this is an app demo, connect to the temporary wallet
+  // Compute boolean value for current wallet address
+  const isAddressInitialized = walletClient?.account?.address
+    ? checkAddressInitialized(walletClient.account.address)
+    : false;
+
+  // Debug logging
+  useEffect(() => {
+    console.log("useInitXmtpClientV3 - Debug state:", {
+      client: client ? "Client exists" : "Client is null",
+      isLoading,
+      walletClient: walletClient
+        ? `Connected: ${walletClient.account?.address}`
+        : "Not connected",
+      status,
+      signing,
+      isAddressInitialized,
+      error: error?.message,
+      isInstallationLimitError,
+    });
+  }, [
+    client,
+    isLoading,
+    walletClient,
+    status,
+    signing,
+    isAddressInitialized,
+    error,
+    isInstallationLimitError,
+  ]);
+
+  // Handle installation limit error recovery
+  const handleInstallationLimitRecovery = async () => {
+    try {
+      if (!walletClient?.account?.address) {
+        throw new Error("Wallet not connected");
+      }
+
+      const address = walletClient.account.address;
+      console.log(
+        `Starting installation limit recovery for address: ${address}`,
+      );
+
+      await handleInstallationLimitError(address);
+      setStatus(undefined);
+      setSigning(false);
+      console.log("Installation limit error recovery completed");
+    } catch (error) {
+      console.error("Failed to recover from installation limit error:", error);
+      throw error;
+    }
+  };
+
+  // Manual client initialization function
+  const initializeXmtpClient = async () => {
+    if (!walletClient || onboardingRef.current || client) {
+      console.log("useInitXmtpClientV3 - Skipping initialization:", {
+        hasWallet: !!walletClient,
+        onboarding: onboardingRef.current,
+        hasClient: !!client,
+      });
+      return;
+    }
+
+    console.log(
+      "useInitXmtpClientV3 - Starting manual client initialization for:",
+      walletClient.account?.address,
+    );
+    onboardingRef.current = true;
+    const { address } = walletClient.account;
+
+    try {
+      setSigning(true);
+      setStatus("new");
+
+      // Initialize V3 client
+      console.log("useInitXmtpClientV3 - Calling initialize...");
+      await initialize(walletClient);
+      console.log("useInitXmtpClientV3 - V3 client initialized successfully");
+
+      // Set up profile information
+      const name = await throttledFetchAddressName(address as ETHAddress);
+      if (name) {
+        const avatar = await throttledFetchEnsAvatar(getWagmiConfig(), {
+          name,
+        });
+        if (avatar) {
+          setClientAvatar(avatar);
+        }
+        setClientName(name);
+      }
+
+      setStatus("enabled");
+      setSigning(false);
+      console.log("useInitXmtpClientV3 - V3 client setup complete");
+    } catch (error) {
+      console.error("Failed to initialize XMTP V3 client:", error);
+      setSigning(false);
+
+      // Don't clear status for installation limit errors - let user handle it
+      if ((error as Error).name !== "InstallationLimitError") {
+        setStatus(undefined);
+      }
+    } finally {
+      onboardingRef.current = false;
+    }
+  };
+
+  // Demo connection (if needed)
   useEffect(() => {
     if (isAppEnvDemo()) {
-      connectWallet({ connector: demoConnector });
+      console.log("Demo mode - connecting to demo wallet");
+      // TODO: Fix demo connector usage
+      // connectWallet({ connector: demoConnector });
     }
     if (!client) {
       setStatus(undefined);
@@ -43,62 +162,19 @@ const useInitXmtpClientV3 = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Initialize V3 client when wallet is connected
+  // Auto-detect wallet changes and clear client if needed
   useEffect(() => {
-    const initializeClient = async () => {
-      if (onboardingRef.current) {
-        // the walletClient has changed, restart the onboarding process
-        if (walletClient !== walletClientRef.current) {
-          setStatus(undefined);
-          setSigning(false);
-        } else {
-          // onboarding in progress and walletClient is the same, do nothing
-          return;
-        }
+    if (walletClient !== walletClientRef.current) {
+      if (walletClientRef.current && walletClient) {
+        // Wallet changed, disconnect old client
+        console.log("useInitXmtpClientV3 - Wallet changed, clearing client");
+        disconnect();
+        setStatus(undefined);
+        setSigning(false);
       }
-
-      // skip this if we already have a client and ensure we have a walletClient
-      if (!client && walletClient) {
-        onboardingRef.current = true;
-        const { address } = walletClient.account;
-
-        try {
-          setSigning(true);
-          setStatus("new");
-
-          // Initialize V3 client
-          await initialize(walletClient);
-
-          // Set up profile information
-          const name = await throttledFetchAddressName(address as ETHAddress);
-          if (name) {
-            const avatar = await throttledFetchEnsAvatar(getWagmiConfig(), {
-              name,
-            });
-            setClientAvatar(avatar);
-            setClientName(name);
-          }
-
-          setStatus("enabled");
-          setSigning(false);
-        } catch (error) {
-          console.error("Failed to initialize XMTP V3 client:", error);
-          setSigning(false);
-          setStatus(undefined);
-        } finally {
-          onboardingRef.current = false;
-        }
-      }
-    };
-
-    void initializeClient();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, walletClient]);
-
-  // it's important that this effect runs last
-  useEffect(() => {
+    }
     walletClientRef.current = walletClient;
-  }, [walletClient]);
+  }, [walletClient, disconnect]);
 
   return {
     client,
@@ -106,6 +182,16 @@ const useInitXmtpClientV3 = () => {
     status,
     setStatus,
     disconnect,
+    initializeXmtpClient, // Manual initialization function
+    isAddressInitialized,
+    canInitialize: !!walletClient && !client && !onboardingRef.current,
+    // Error handling
+    error,
+    isInstallationLimitError,
+    handleInstallationLimitRecovery,
+    clearLocalData: walletClient?.account?.address
+      ? () => clearLocalData(walletClient.account!.address)
+      : undefined,
   };
 };
 

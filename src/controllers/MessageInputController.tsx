@@ -22,8 +22,47 @@ export const MessageInputController = ({
 }: MessageInputControllerProps) => {
   const { startConversation } = useStartConversation();
   const recipientAddress = useXmtpStore((s) => s.recipientAddress);
+  const { sendMessage } = useSendMessage();
+  const { conversation } = useSelectedConversation();
 
-  // TODO: Implement proper V3 message input logic
+  // V3 message input logic - handles sending messages and attachments
+  const handleSendMessage = async (message: string) => {
+    try {
+      let activeConversation = conversation;
+
+      // If no conversation selected, start a new one
+      if (!activeConversation && recipientAddress) {
+        console.log(
+          "V3 message input - starting new conversation with:",
+          recipientAddress,
+        );
+        const result = await startConversation(recipientAddress);
+        // Map V3 conversation to CachedConversationWithId format
+        activeConversation = {
+          conversation: result.conversation as any,
+          peerAddress: recipientAddress,
+          id: result.conversation.id || recipientAddress,
+        };
+      }
+
+      if (activeConversation) {
+        console.log("V3 message input - sending message:", message);
+        await sendMessage(
+          (activeConversation.conversation || activeConversation) as any,
+          message,
+        );
+
+        // Clear attachment after sending
+        if (attachment) {
+          setAttachment(undefined);
+          setAttachmentPreview(undefined);
+        }
+      }
+    } catch (error) {
+      console.error("Error sending message:", error);
+    }
+  };
+
   return (
     <MessageInput
       attachment={attachment}
@@ -31,6 +70,7 @@ export const MessageInputController = ({
       setAttachment={setAttachment}
       setAttachmentPreview={setAttachmentPreview}
       setIsDragActive={setIsDragActive}
+      onSendMessage={handleSendMessage}
     />
   );
 };

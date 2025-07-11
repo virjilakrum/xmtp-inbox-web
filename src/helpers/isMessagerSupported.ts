@@ -20,13 +20,28 @@ type CachedMessageWithId = {
  * Determines if a message is supported by the app
  */
 export const isMessageSupported = (message: CachedMessageWithId) => {
-  // TODO: Update for V3 ContentTypeId handling
-  // For now, check the contentType string directly
-  const contentTypeString = message.contentType;
+  // V3 ContentTypeId handling - check content type structure
+  const contentType = message.contentType;
 
-  return (
-    contentTypeString === ContentTypeText.toString() ||
-    contentTypeString === ContentTypeRemoteAttachment.toString() ||
-    contentTypeString === ContentTypeScreenEffect.toString()
-  );
+  // V3 content types can be string or object
+  if (typeof contentType === "string") {
+    return (
+      contentType === ContentTypeText.toString() ||
+      contentType === ContentTypeRemoteAttachment.toString() ||
+      contentType === ContentTypeScreenEffect.toString()
+    );
+  }
+
+  // V3 ContentTypeId object structure
+  if (typeof contentType === "object" && contentType) {
+    const typeId = contentType as ContentTypeId;
+    return (
+      (typeId.authorityId === "xmtp.org" && typeId.typeId === "text") ||
+      (typeId.authorityId === "xmtp.org" &&
+        typeId.typeId === "remoteStaticAttachment") ||
+      (typeId.authorityId === "xmtp.org" && typeId.typeId === "screenEffect")
+    );
+  }
+
+  return false;
 };
