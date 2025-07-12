@@ -1,11 +1,11 @@
 import {
   CachedMessageWithId,
-  CachedConversation,
+  CachedConversationWithId,
 } from "../../../types/xmtpV3Types";
 
 interface ReactionsBarProps {
   message: CachedMessageWithId;
-  conversation: CachedConversation;
+  conversation: CachedConversationWithId;
   setOnHover: (hover: boolean) => void;
 }
 

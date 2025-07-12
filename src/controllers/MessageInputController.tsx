@@ -5,6 +5,7 @@ import { useStartConversation, useSendMessage } from "../hooks/useV3Hooks";
 import { useXmtpStore } from "../store/xmtp";
 import useSelectedConversation from "../hooks/useSelectedConversation";
 import type { Attachment } from "@xmtp/content-type-remote-attachment";
+import type { CachedConversationWithId } from "../types/xmtpV3Types";
 
 interface MessageInputControllerProps {
   attachment?: Attachment;
@@ -33,7 +34,8 @@ export const MessageInputController = ({
   // V3 message input logic - handles sending messages and attachments
   const handleSendMessage = async (message: string) => {
     try {
-      let targetConversation = conversation;
+      // Use type that can handle both CachedConversationWithId and raw XMTP conversation
+      let targetConversation: CachedConversationWithId | any = conversation;
       let targetConversationId = conversationTopic;
 
       // If no conversation is selected but we have a recipient address, start new conversation

@@ -22,10 +22,10 @@ const FullMessage: React.FC<FullMessageProps> = ({ message }) => {
   };
 
   const getSenderAddress = () => {
-    if (message.message.senderInboxId) {
-      return shortAddress(message.message.senderInboxId);
+    if (message.senderInboxId) {
+      return shortAddress(message.senderInboxId);
     }
-    return message.message.senderInboxId || "Unknown";
+    return message.senderAddress || "Unknown";
   };
 
   return (
@@ -35,13 +35,11 @@ const FullMessage: React.FC<FullMessageProps> = ({ message }) => {
           {getSenderAddress()}
         </span>
         <span className="text-xs text-gray-500 ml-2">
-          {formatTimestamp(
-            new Date(Number(message.message.sentAtNs) / 1000000),
-          )}
+          {formatTimestamp(new Date(Number(message.sentAtNs) / 1000000))}
         </span>
       </div>
       <div className="message-content">
-        <p className="text-gray-900">{String(message.message.content)}</p>
+        <p className="text-gray-900">{message.content.text || "No content"}</p>
       </div>
     </div>
   );

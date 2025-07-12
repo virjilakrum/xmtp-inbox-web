@@ -26,29 +26,19 @@ const MessageContentController = ({
     shortcodes: ["emojibase"],
   });
 
-  // V3 DecodedMessage has content, contentType, and fallback properties directly
-  const messageContent = message.message?.content;
-  const contentType = message.message?.contentType;
-  const fallback = message.message?.fallback;
+  // V3 CachedMessageWithId has content of type MessageContent
+  const messageContent = message.content;
 
-  // Check content type using the V3 ContentTypeId structure
-  const isTextType =
-    contentType?.authorityId === "xmtp.org" &&
-    contentType?.typeId === "text" &&
-    contentType?.versionMajor === 1;
-
+  // Determine message type based on content structure
+  const isTextType = typeof messageContent.text === "string";
   const isRemoteAttachmentType =
-    contentType?.authorityId === "xmtp.org" &&
-    contentType?.typeId === "remoteStaticAttachment" &&
-    contentType?.versionMajor === 1;
-
+    Array.isArray(messageContent.attachments) &&
+    messageContent.attachments.length > 0;
   const isReplyType =
-    contentType?.authorityId === "xmtp.org" &&
-    contentType?.typeId === "reply" &&
-    contentType?.versionMajor === 1;
+    typeof messageContent.quote === "object" && messageContent.quote !== null;
 
   if (isTextType) {
-    const content = messageContent as string;
+    const content = messageContent.text || "";
     return (
       <span className="interweave-content" data-testid="message-tile-text">
         <Interweave
@@ -80,23 +70,45 @@ const MessageContentController = ({
   }
 
   if (isReplyType) {
-    const reply = messageContent as Reply;
-    // Create a new message object with reply content for recursive rendering
-    const newMessage: CachedMessageWithId = {
-      ...message,
-      message: {
-        ...message.message,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        content: reply.content,
-        contentType: reply.contentType,
-      } as DecodedMessage, // Type assertion to avoid private property issues
-    };
-
-    return <MessageContentController message={newMessage} isSelf={isSelf} />;
+    const quote = messageContent.quote!;
+    return (
+      <div className="reply-message">
+        <div className="reply-quote">
+          <span className="reply-author">{quote.author}:</span>
+          <span className="reply-text">{quote.text}</span>
+        </div>
+        {/* Render the current message text if it exists */}
+        {messageContent.text && (
+          <div className="reply-content">
+            <span
+              className="interweave-content"
+              data-testid="message-tile-text">
+              <Interweave
+                content={messageContent.text}
+                newWindow
+                escapeHtml
+                onClick={(event: MouseEvent<HTMLDivElement>) =>
+                  event.stopPropagation()
+                }
+                matchers={[
+                  new UrlMatcher("url"),
+                  new EmojiMatcher("emoji", {
+                    convertEmoticon: true,
+                    convertShortcode: true,
+                    renderUnicode: true,
+                  }),
+                ]}
+                emojiSource={source}
+              />
+            </span>
+          </div>
+        )}
+      </div>
+    );
   }
 
-  // message content type not supported, display fallback
-  return <span>{fallback}</span>;
+  // message content type not supported, display generic message
+  return <span>Unsupported message type</span>;
 };
 
 export default MessageContentController;
