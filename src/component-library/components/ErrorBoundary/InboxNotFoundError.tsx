@@ -31,8 +31,8 @@ export const InboxNotFoundError: React.FC<InboxNotFoundErrorProps> = ({
   };
 
   const shareInvite = () => {
-    const inviteText = `Hey! I tried to message you on XMTP but you need to set up your inbox first. Visit https://xmtp.org to get started with decentralized messaging! 🚀`;
-    const mailtoUrl = `mailto:?subject=Join me on XMTP&body=${encodeURIComponent(inviteText)}`;
+    const inviteText = `Hey! I tried to message you on zkλ but you need to set up your inbox first. Visit https://zkλ.org to get started with decentralized messaging! 🚀`;
+    const mailtoUrl = `mailto:?subject=Join me on zkλ&body=${encodeURIComponent(inviteText)}`;
     window.open(mailtoUrl, "_blank");
   };
 
@@ -61,18 +61,18 @@ export const InboxNotFoundError: React.FC<InboxNotFoundErrorProps> = ({
               title="Click to copy address">
               {formatAddress(recipientAddress)}
             </button>{" "}
-            hasn't set up XMTP messaging yet.
+            hasn't set up zkλ messaging yet.
           </p>
 
-          <div className="bg-blue-50 rounded-lg p-4 mb-4">
+          <div className="bg-gray-50 rounded-lg p-4 mb-4">
             <div className="flex items-start space-x-3">
-              <InformationCircleIcon className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-              <div className="text-sm text-blue-800">
+              <InformationCircleIcon className="w-5 h-5 text-gray-600 mt-0.5 flex-shrink-0" />
+              <div className="text-sm text-gray-800">
                 <p className="font-medium mb-1">What does this mean?</p>
                 <p>
-                  XMTP requires both sender and recipient to have an active
+                  zkλ requires both sender and recipient to have an active
                   inbox. The person you're trying to message needs to connect
-                  their wallet to XMTP first.
+                  their wallet to zkλ first.
                 </p>
               </div>
             </div>
@@ -82,11 +82,11 @@ export const InboxNotFoundError: React.FC<InboxNotFoundErrorProps> = ({
         {/* Actions */}
         <div className="space-y-3">
           <PillButton
-            label="Invite to XMTP"
+            label="Invite to zkλ"
             iconOverride={<UsersIcon className="w-4 h-4" />}
             onClick={shareInvite}
             variant="primary"
-            testId="invite-to-xmtp"
+            testId="invite-to-zkλ"
           />
 
           {onRetry && (

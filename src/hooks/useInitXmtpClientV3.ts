@@ -22,6 +22,7 @@ const useInitXmtpClientV3 = () => {
     client,
     isLoading,
     initialize,
+    silentRestore,
     disconnect,
     isAddressInitialized: checkAddressInitialized,
     error,
@@ -172,9 +173,36 @@ const useInitXmtpClientV3 = () => {
         setStatus(undefined);
         setSigning(false);
       }
+
+      // If a wallet is connected and we don't have a client, try to restore first
+      if (walletClient && !client && walletClient.account?.address) {
+        const address = walletClient.account.address;
+        console.log(
+          "useInitXmtpClientV3 - Wallet connected, checking for existing client",
+        );
+
+        // Check if we can restore the client without signature
+        if (isAddressInitialized) {
+          console.log(
+            "useInitXmtpClientV3 - Address previously initialized, attempting silent restore",
+          );
+          // Try to restore the client silently (won't create new client)
+          silentRestore(address).catch((error) => {
+            console.log(
+              "useInitXmtpClientV3 - Silent restore failed, user will need to manually initialize:",
+              error.message,
+            );
+            // Don't throw error, just log it - user can manually initialize
+          });
+        } else {
+          console.log(
+            "useInitXmtpClientV3 - Address not previously initialized, waiting for manual initialization",
+          );
+        }
+      }
     }
     walletClientRef.current = walletClient;
-  }, [walletClient, disconnect]);
+  }, [walletClient, disconnect, isAddressInitialized, client, silentRestore]);
 
   return {
     client,

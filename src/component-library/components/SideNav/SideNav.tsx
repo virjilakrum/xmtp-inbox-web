@@ -101,44 +101,64 @@ const SideNav = ({
   ];
   const [currentIcon, setCurrentIcon] = useState(icons[0].key);
 
-  const mappedButtons = icons.map((icn) => (
-    <div className="group flex relative w-full" key={icn.key}>
-      <button
-        type="button"
-        onClick={(event) => {
-          setCurrentIcon((event.target as HTMLElement).innerText);
-          onSideNavBtnClick(icn.key as string);
-        }}
-        aria-label={icn.key as string}
-        className={classNames(
-          "hover:bg-gray-200",
-          "p-2",
-          isOpen ? "pr-8" : "",
-          "hover:text-black",
-          "text-gray-500",
-          "rounded-lg",
-          "w-full",
-          "flex",
-          "item-center",
-          "h-fit",
-          "rounded",
-          "cursor-pointer",
-          isOpen ? "w-[300px]" : "",
-        )}>
-        <div
+  const mappedButtons = icons.map((icn) => {
+    const isActive =
+      currentIcon === icn.key || (!currentIcon && icons[1].key === icn.key);
+
+    return (
+      <div className="group flex relative w-full" key={icn.key}>
+        <button
+          type="button"
+          onClick={(event) => {
+            setCurrentIcon((event.target as HTMLElement).innerText);
+            onSideNavBtnClick(icn.key as string);
+          }}
+          aria-label={icn.key as string}
           className={classNames(
-            "flex justify-center items-center h-fit",
-            currentIcon === icn.key ||
-              (!currentIcon && icons[1].key === icn.key)
-              ? "font-bold"
-              : "",
+            "nav-item",
+            "transition-all duration-200 ease-out",
+            "p-4 rounded-2xl w-full flex items-center",
+            "transform hover:scale-105 active:scale-95",
+            "group relative overflow-hidden",
+            isActive
+              ? "nav-item-active text-gray-900 shadow-elegant"
+              : "text-gray-600 hover:text-gray-900",
+            isOpen ? "justify-start space-x-4" : "justify-center",
           )}>
-          {icn}
-          <span data-testid={icn.key}>{isOpen && icn.key}</span>
-        </div>
-      </button>
-    </div>
-  ));
+          {/* Active indicator */}
+          {isActive && (
+            <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-gray-700 to-gray-900 rounded-r-lg" />
+          )}
+
+          {/* Icon container */}
+          <div
+            className={classNames(
+              "transition-transform duration-200",
+              "flex items-center justify-center",
+              isActive ? "scale-110" : "group-hover:scale-110",
+            )}>
+            {icn}
+          </div>
+
+          {/* Label */}
+          {isOpen && (
+            <span
+              data-testid={icn.key}
+              className={classNames(
+                "font-semibold transition-all duration-200",
+                "group-hover:translate-x-1",
+                isActive ? "text-gray-900" : "",
+              )}>
+              {icn.key}
+            </span>
+          )}
+
+          {/* Hover background effect */}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gray-100/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 -skew-x-12" />
+        </button>
+      </div>
+    );
+  });
 
   return (
     <div
@@ -148,31 +168,56 @@ const SideNav = ({
         "justify-between",
         "items-center",
         "h-screen",
-        "bg-white",
-        isOpen ? "px-6" : "px-3",
-        "border-r",
-        "border-gray-200",
-        "shadow-lg",
-        !isOpen ? "w-[64px]" : "absolute w-[80vw] lg:w-full lg:relative z-50",
+        "bg-gradient-to-b from-white via-gray-50 to-white",
+        "backdrop-blur-sm",
+        "transition-all duration-300 ease-in-out",
+        isOpen ? "px-6" : "px-4",
+        "border-r-2",
+        "border-gray-200/50",
+        "shadow-elegant",
+        !isOpen
+          ? "w-[80px]"
+          : "absolute w-[85vw] lg:w-[280px] lg:relative z-50",
       )}>
-      <div className="flex flex-col items-start space-y-4 w-full">
-        <div className="py-4 flex w-full">
+      {/* Mobile Overlay */}
+      {isOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black/30 backdrop-blur-sm z-40"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+
+      <div className="flex flex-col items-start space-y-6 w-full relative z-50">
+        <div className="py-6 flex w-full">
           <div className="w-full">
-            <div className="flex mb-12 items-center">
-              <Avatar url={avatarUrl} address={walletAddress} />
+            {/* User Profile Section */}
+            <div
+              className={classNames(
+                "flex mb-8 items-center transition-all duration-300",
+                isOpen ? "space-x-4" : "justify-center",
+              )}>
+              <div className="relative">
+                <Avatar url={avatarUrl} address={walletAddress} />
+                {/* Online Status Indicator */}
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 border-2 border-white rounded-full animate-pulse" />
+              </div>
+
               {isOpen && (
-                <div className="flex items-center">
-                  <div className="flex flex-col px-2 justify-center">
-                    <span className="font-bold" data-testid="wallet-address">
+                <div className="flex flex-col animate-fade-in-scale">
+                  <div className="flex flex-col justify-center">
+                    <span
+                      className="font-bold text-gray-900 text-lg leading-tight"
+                      data-testid="wallet-address">
                       {displayAddress ? shortAddress(displayAddress) : ""}
                     </span>
                     {walletAddress && displayAddress !== walletAddress && (
                       <button
                         type="button"
-                        className="font-sm"
+                        className="text-sm text-gray-500 hover:text-gray-700 font-mono bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded-lg transition-all duration-200 transform hover:scale-105 text-left mt-1"
                         onClick={() => {
                           void navigator.clipboard.writeText(walletAddress);
-                        }}>
+                        }}
+                        title="Click to copy full address">
                         {shortAddress(walletAddress)}
                       </button>
                     )}
@@ -180,22 +225,54 @@ const SideNav = ({
                 </div>
               )}
             </div>
-            <div className="flex flex-col items-start pt-4 space-y-4">
+
+            {/* Navigation Menu */}
+            <div className="flex flex-col items-start space-y-3">
               {mappedButtons}
             </div>
           </div>
         </div>
       </div>
-      <div className="flex justify-start items-center font-bold w-full pb-8">
+      {/* Footer Section */}
+      <div className="flex flex-col items-center w-full pb-6 space-y-4">
+        {/* Settings/Language Button */}
         <div
           role="button"
           onClick={onXmtpIconClick}
           onKeyDown={onXmtpIconClick}
           tabIndex={0}
-          className="cursor-pointer"
+          className={classNames(
+            "cursor-pointer transition-all duration-200 hover:scale-110 active:scale-95 p-3 rounded-2xl hover:bg-gray-100 group",
+            isOpen ? "self-start" : "self-center",
+          )}
           data-testid="icon">
-          {icon}
+          <div className="transform transition-transform duration-200 group-hover:rotate-12">
+            {icon}
+          </div>
         </div>
+
+        {/* Collapse/Expand Button */}
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="p-2 rounded-xl hover:bg-gray-100 transition-all duration-200 transform hover:scale-105 group lg:hidden"
+          title={isOpen ? "Collapse sidebar" : "Expand sidebar"}>
+          <ChevronDoubleRightIcon
+            className={classNames(
+              "w-5 h-5 text-gray-600 transition-transform duration-300",
+              isOpen ? "rotate-180" : "",
+            )}
+          />
+        </button>
+
+        {/* App Branding */}
+        {isOpen && (
+          <div className="text-center animate-fade-in-scale">
+            <p className="text-xs text-gray-500 font-medium">Powered by</p>
+            <p className="text-sm font-bold bg-gradient-to-r from-gray-700 to-gray-900 bg-clip-text text-transparent">
+              zkλ Protocol
+            </p>
+          </div>
+        )}
       </div>
       <Transition.Root show={isQrCodeDialogOpen} as={Fragment}>
         <Dialog
@@ -219,11 +296,7 @@ const SideNav = ({
                 <XIcon width={24} />
               </div>
               <div className="h-8">
-                <img
-                  className="h-[100%]"
-                  alt="xmtp-logo"
-                  src="/xmtp-logo.png"
-                />
+                <img className="h-[100%]" alt="zkλ-logo" src="/xmtp-logo.png" />
               </div>
               <div className="text-center p-4 pb-6">
                 {t("common.share_code")}
@@ -310,7 +383,7 @@ const SideNav = ({
                     }
                   }}
                   data-testid="share-qr"
-                  className="text-sm ml-2 cursor-pointer text-indigo-600 hover:text-indigo-800">
+                  className="text-sm ml-2 cursor-pointer text-gray-600 hover:text-gray-800">
                   {t("common.share_qr_code")}
                 </span>
                 <hr className="m-2" />

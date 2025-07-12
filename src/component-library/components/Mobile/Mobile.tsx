@@ -9,33 +9,39 @@ const LinkEle = ({ url, text }: { url: string; text: string }) => (
 );
 
 export const Mobile = () => (
-  <div className="flex flex-col items-center justify-center inset-0 fixed p-8 text-center">
-    <div className="flex flex-col w-full items-center">
-      <img src="/xmtp-icon.png" alt="XMTP logo" className="h-24 w-24 mb-4" />
-      <h1 className="text-3xl font-bold">Looks like you&apos;re on mobile!</h1>
-    </div>
-    <p className="text-left mt-4 font-bold">For mobile-friendly chat:</p>
-    <ul>
-      <li className="mt-4">
-        Try group chat on the dev network in Converse Preview:
-      </li>
-      <LinkEle url="https://testflight.apple.com/join/xEJOvzEx" text="iOS" />
-      |
-      <LinkEle
-        url="https://drive.google.com/file/d/1rUtCmtIB6VzHNW8PDJ1TMBRuI2OEOdcg/view?usp=drive_link"
-        text="Android"
-      />
-      <li className="mt-4">
-        Try subscription notifications and 1:1 chats in
-        <LinkEle url="https://go.cb-w.com" text="Coinbase Wallet" />
-      </li>
-      <li className="mt-4">
-        Devs, build on the open source
-        <LinkEle
-          url="https://github.com/xmtp-labs/xmtp-inbox-mobile"
-          text="XMTP React Native Reference App"
+  <div className="border-t-2 border-gray-200 bg-white py-8 px-6 md:px-8">
+    <div className="flex flex-col md:flex-row items-start md:items-center justify-between">
+      <div className="mb-4 md:mb-0">
+        <img
+          src="/xmtp-logo.png"
+          alt="zkλ logo"
+          className="w-8 h-8 md:w-10 md:h-10 mb-2"
         />
-      </li>
-    </ul>
+        <p className="text-sm text-gray-600 leading-relaxed">
+          This is a reference app built with zkλ, an open protocol for private
+          web3 messaging.
+        </p>
+      </div>
+
+      <div className="flex items-center gap-4">
+        <button
+          className="text-gray-700 hover:text-gray-900 pb-4 cursor-pointer font-bold transition-colors"
+          onClick={() =>
+            window.open(
+              "https://github.com/xmtp-labs/xmtp-react-native",
+              "_blank",
+            )
+          }>
+          View React Native
+        </button>
+        <button
+          className="text-gray-700 hover:text-gray-900 pb-4 cursor-pointer font-bold transition-colors"
+          onClick={() =>
+            window.open("https://github.com/xmtp-labs/xmtp-inbox-web", "_blank")
+          }>
+          View Web App
+        </button>
+      </div>
+    </div>
   </div>
 );

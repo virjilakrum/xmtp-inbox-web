@@ -44,14 +44,14 @@ interface GhostButtonProps {
 
 const colorClassMapping = {
   primary: {
-    backgroundColor: "white",
+    backgroundColor: "bg-transparent hover:bg-gray-50",
     fontColor:
-      "text-indigo-600 hover:text-indigo-800 focus:outline-none focus-visible:ring focus-visible:ring-indigo-800",
+      "text-gray-700 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2",
   },
   secondary: {
-    backgroundColor: "white",
+    backgroundColor: "bg-transparent hover:bg-red-50",
     fontColor:
-      "text-red-600 hover:text-red-800 focus:outline-none focus-visible:ring focus-visible:ring-red-800",
+      "text-red-600 hover:text-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2",
   },
 };
 
@@ -97,16 +97,28 @@ export const GhostButton = ({
         disabled,
         sizeClass,
         `min-w-[${minWidth}%]`,
-        "h-fit",
-        "font-bold",
-        "rounded-full",
+        "font-semibold",
+        "rounded-none",
+        "px-4 py-2",
+        "transition-all duration-200 ease-out",
+        "transform hover:scale-105 active:scale-95",
+        "border-2 border-transparent hover:border-gray-200",
+        "shadow-sm hover:shadow-elegant",
+        "group",
         "m-1",
-        "p-1",
       )}
       aria-label={srText}>
-      <div className="flex justify-center items-center h-fit space-x-2">
-        <div>{label}</div>
-        {isLoading ? <ButtonLoader color="primary" size={size} /> : icon}
+      <div className="flex justify-center items-center space-x-2">
+        <div className="transition-transform duration-200 group-hover:translate-x-0.5">
+          {label}
+        </div>
+        {isLoading ? (
+          <ButtonLoader color="primary" size={size} />
+        ) : (
+          <div className="transition-transform duration-200 group-hover:translate-x-0.5">
+            {icon}
+          </div>
+        )}
       </div>
     </button>
   );

@@ -100,44 +100,61 @@ const useXmtpV3Client = () => {
     }
   };
 
-  // Clear all local data for the specified address
+  // Clear local data for address
   const clearLocalData = async (address: string) => {
     try {
       console.log(`Clearing local data for address: ${address}`);
 
-      // Clear initialization flag
-      clearAddressInitialization(address);
-
-      // Clear IndexedDB data for this address
-      const dbName = `xmtp-v3-${address}`;
-
-      // Attempt to delete the database
-      if ("databases" in indexedDB) {
-        const databases = await indexedDB.databases();
-        const targetDb = databases.find((db) => db.name === dbName);
-        if (targetDb) {
-          const deleteReq = indexedDB.deleteDatabase(dbName);
-          await new Promise((resolve, reject) => {
-            deleteReq.onsuccess = () => resolve(true);
-            deleteReq.onerror = () => reject(deleteReq.error);
-          });
-          console.log(`Cleared local database: ${dbName}`);
-        }
+      // Clear initialization status
+      const initialized = localStorage.getItem(XMTP_V3_INITIALIZED_KEY);
+      if (initialized) {
+        const addresses = JSON.parse(initialized) as string[];
+        const filteredAddresses = addresses.filter(
+          (addr) => addr.toLowerCase() !== address.toLowerCase(),
+        );
+        localStorage.setItem(
+          XMTP_V3_INITIALIZED_KEY,
+          JSON.stringify(filteredAddresses),
+        );
       }
 
-      // Clear any other address-specific localStorage keys
-      const keysToRemove = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.includes(address.toLowerCase())) {
-          keysToRemove.push(key);
-        }
-      }
-      keysToRemove.forEach((key) => localStorage.removeItem(key));
+      // Clear stored encryption key
+      const keyName = `xmtp-v3-encryption-key-${address}`;
+      localStorage.removeItem(keyName);
 
-      console.log(`Cleared all local data for address: ${address}`);
+      // Clear any other XMTP related data for this address
+      const xmtpKeys = Object.keys(localStorage).filter(
+        (key) =>
+          key.includes(address.toLowerCase()) ||
+          key.includes(`xmtp-v3-${address}`),
+      );
+      xmtpKeys.forEach((key) => localStorage.removeItem(key));
+
+      // Clear IndexedDB database
+      const dbPath = `xmtp-v3-${address}`;
+      const dbName = `xmtp-${dbPath}`;
+
+      // Delete the IndexedDB database
+      const deleteRequest = indexedDB.deleteDatabase(dbName);
+      await new Promise<void>((resolve, reject) => {
+        deleteRequest.onsuccess = () => {
+          console.log(`Database ${dbName} deleted successfully`);
+          resolve();
+        };
+        deleteRequest.onerror = () => {
+          console.error(`Error deleting database ${dbName}`);
+          reject(deleteRequest.error);
+        };
+        deleteRequest.onblocked = () => {
+          console.warn(`Database ${dbName} deletion blocked`);
+          // Still resolve as it may be deleted eventually
+          resolve();
+        };
+      });
+
+      console.log(`Local data cleared successfully for address: ${address}`);
     } catch (error) {
-      console.error("Failed to clear local data:", error);
+      console.error(`Error clearing local data for address ${address}:`, error);
       throw error;
     }
   };
@@ -193,18 +210,135 @@ const useXmtpV3Client = () => {
         return null;
       }
 
-      // Try to create client without signer (restore from database)
+      // Check if database exists for this address
       const dbPath = `xmtp-v3-${address}`;
 
-      // TODO: In real XMTP V3, there might be a restore method
-      // For now, we'll need to check if the database exists
+      // For V3, we need to check if the database exists
+      // This is done by checking if there's data in IndexedDB for this path
+      const dbExists = await checkDatabaseExists(dbPath);
+      if (!dbExists) {
+        console.log("useXmtpV3Client - Database does not exist for address");
+        return null;
+      }
+
+      // Try to restore client from existing database
+      // We need to get the stored encryption key for this address
+      const storedEncryptionKey = await getStoredEncryptionKey(address);
+      if (!storedEncryptionKey) {
+        console.log("useXmtpV3Client - No encryption key found for address");
+        return null;
+      }
+
       console.log(
-        "useXmtpV3Client - Client restoration not yet implemented, will need to re-initialize",
+        "useXmtpV3Client - Attempting to restore client from database",
       );
-      return null;
+
+      // Create a minimal signer for restoration (won't be used for signing)
+      const restoreSigner = {
+        type: "EOA" as const,
+        getIdentifier: () => ({
+          identifierKind: "Ethereum" as const,
+          identifier: address,
+        }),
+        signMessage: async (message: string) => {
+          throw new Error("Signing should not be required for restoration");
+        },
+      };
+
+      // Try to restore the client from database
+      const client = await Client.create(restoreSigner, {
+        env: getEnv() as "dev" | "production" | "local",
+        dbEncryptionKey: storedEncryptionKey,
+        dbPath,
+      });
+
+      console.log(
+        "useXmtpV3Client - Client restored successfully from database",
+      );
+      return client;
     } catch (error) {
       console.error("useXmtpV3Client - Failed to restore client:", error);
+      // If restoration fails, we'll fall back to creating a new client
       return null;
+    }
+  };
+
+  // Silent restore function - only attempts restoration, doesn't create new client
+  const silentRestore = async (address: string): Promise<Client | null> => {
+    try {
+      console.log("useXmtpV3Client - Attempting silent restore for:", address);
+
+      // Check if we have a stored client for this address
+      if (!isAddressInitialized(address)) {
+        console.log("useXmtpV3Client - Address not previously initialized");
+        return null;
+      }
+
+      const restoredClient = await tryRestoreClient(address);
+      if (restoredClient) {
+        console.log("useXmtpV3Client - Client restored silently");
+        clientRef.current = restoredClient;
+        setState({
+          client: restoredClient,
+          isLoading: false,
+          error: null,
+          isConnected: true,
+        });
+        return restoredClient;
+      }
+
+      console.log("useXmtpV3Client - Silent restore failed");
+      return null;
+    } catch (error) {
+      console.error("useXmtpV3Client - Silent restore failed:", error);
+      return null;
+    }
+  };
+
+  // Helper function to check if database exists
+  const checkDatabaseExists = async (dbPath: string): Promise<boolean> => {
+    try {
+      // Check if IndexedDB database exists for this path
+      const dbName = `xmtp-${dbPath}`;
+      const databases = await indexedDB.databases();
+      return databases.some((db) => db.name === dbName);
+    } catch (error) {
+      console.error("Error checking database existence:", error);
+      return false;
+    }
+  };
+
+  // Helper function to get stored encryption key
+  const getStoredEncryptionKey = async (
+    address: string,
+  ): Promise<Uint8Array | null> => {
+    try {
+      const keyName = `xmtp-v3-encryption-key-${address}`;
+      const storedKey = localStorage.getItem(keyName);
+      if (!storedKey) {
+        return null;
+      }
+      // Convert stored key back to Uint8Array
+      const keyArray = JSON.parse(storedKey);
+      return new Uint8Array(keyArray);
+    } catch (error) {
+      console.error("Error getting stored encryption key:", error);
+      return null;
+    }
+  };
+
+  // Helper function to store encryption key
+  const storeEncryptionKey = (
+    address: string,
+    encryptionKey: Uint8Array,
+  ): void => {
+    try {
+      const keyName = `xmtp-v3-encryption-key-${address}`;
+      // Convert Uint8Array to array for storage
+      const keyArray = Array.from(encryptionKey);
+      localStorage.setItem(keyName, JSON.stringify(keyArray));
+    } catch (error) {
+      console.error("Error storing encryption key:", error);
     }
   };
 
@@ -278,6 +412,7 @@ const useXmtpV3Client = () => {
 
       // Mark address as initialized for future sessions
       markAddressInitialized(address);
+      storeEncryptionKey(address, dbEncryptionKey); // Store the encryption key
 
       clientRef.current = client;
       setState({
@@ -370,6 +505,7 @@ const useXmtpV3Client = () => {
   return {
     ...state,
     initialize,
+    silentRestore,
     disconnect,
     isAddressInitialized,
     // Installation management methods

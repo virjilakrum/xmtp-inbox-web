@@ -11,8 +11,17 @@ interface FullConversationProps {
 const LoadingMessage: React.FC = () => {
   const { t } = useTranslation();
   return (
-    <div className="flex align-center justify-center text-gray-500 font-regular text-sm animate-pulse">
-      {t("messages.conversation_loading")}
+    <div className="flex flex-col items-center justify-center py-8 px-4">
+      <div className="glass p-6 text-center shadow-modern">
+        <div className="flex items-center justify-center space-x-2 mb-3">
+          <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+          <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+          <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
+        </div>
+        <div className="text-gray-600 font-medium text-sm">
+          {t("messages.conversation_loading")}
+        </div>
+      </div>
     </div>
   );
 };

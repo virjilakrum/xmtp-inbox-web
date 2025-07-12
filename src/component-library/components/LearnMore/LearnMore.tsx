@@ -30,13 +30,13 @@ export const LearnMore = ({
           <div className="glass rounded-3xl p-8 shadow-modern">
             <SparklesIcon className="w-16 h-16 gradient-primary rounded-2xl p-3 mx-auto mb-4" />
             <h1
-              className="text-5xl font-bold bg-gradient-to-r from-gray-900 via-blue-900 to-purple-900 bg-clip-text text-transparent mb-4"
+              className="text-5xl font-bold bg-gradient-to-r from-gray-900 via-gray-800 to-black bg-clip-text text-transparent mb-4"
               data-testid="learn-more-header">
               {t("messages.messages_empty_header")}
             </h1>
             <p className="text-xl text-gray-600 max-w-md mx-auto leading-relaxed">
               Start meaningful conversations with end-to-end encryption powered
-              by XMTP
+              by zkλ
             </p>
           </div>
         </div>
@@ -76,7 +76,7 @@ export const LearnMore = ({
             Documentation
           </h3>
           <p className="text-gray-600 text-sm leading-relaxed">
-            Learn how to integrate XMTP into your applications
+            Learn how to integrate zkλ into your applications
           </p>
         </div>
       </div>
@@ -91,7 +91,7 @@ export const LearnMore = ({
 
         <button
           onClick={setStartedFirstMessage}
-          className="gradient-primary text-white px-8 py-4 rounded-2xl font-semibold shadow-elegant hover:shadow-modern transition-all duration-300 hover:scale-105 flex items-center gap-3 mx-auto group"
+          className="gradient-primary text-white px-8 py-4 font-semibold shadow-elegant hover:shadow-modern transition-all duration-300 hover:scale-105 flex items-center gap-3 mx-auto group"
           data-testid="message">
           <PaperAirplaneIcon className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
           Send your first message
@@ -99,18 +99,18 @@ export const LearnMore = ({
 
         <div className="flex gap-4 mt-6 justify-center">
           <a
-            href="https://community.xmtp.org"
+            href="https://community.zkλ.org"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-600 hover:text-blue-700 font-medium transition-colors"
+            className="text-gray-600 hover:text-gray-800 font-medium transition-colors"
             data-testid="community">
             Join Community →
           </a>
           <a
-            href="https://docs.xmtp.org"
+            href="https://docs.zkλ.org"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-600 hover:text-blue-700 font-medium transition-colors"
+            className="text-gray-600 hover:text-gray-800 font-medium transition-colors"
             data-testid="docs">
             Read Docs →
           </a>

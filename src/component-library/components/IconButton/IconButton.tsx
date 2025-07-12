@@ -41,10 +41,14 @@ interface IconButtonProps {
 const colorClassMapping = {
   primary: {
     backgroundColor:
-      "bg-indigo-600 hover:bg-indigo-800 focus:outline-none focus:ring focus:ring-indigo-800",
+      "gradient-primary hover:shadow-modern focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2",
     fontColor: null,
   },
-  secondary: null,
+  secondary: {
+    backgroundColor:
+      "bg-white border-2 border-gray-300 hover:border-gray-600 hover:shadow-elegant focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2",
+    fontColor: null,
+  },
 };
 
 const sizeClassMapping = {
@@ -79,24 +83,28 @@ export const IconButton = ({
       onClick={onClick}
       disabled={isDisabled}
       className={classNames(
-        colorClassMapping.primary.backgroundColor,
+        variant === "primary"
+          ? colorClassMapping.primary.backgroundColor
+          : colorClassMapping.secondary.backgroundColor,
         sizeClass,
         disabled,
-        shape,
+        "rounded-none",
         "flex",
         "justify-center",
         "items-center",
-        "p-0",
-        "h-fit",
+        "transition-all duration-200 ease-out",
+        "transform hover:scale-105 active:scale-95",
+        "group",
+        "relative overflow-hidden",
+        size === "small" ? "p-2" : "p-3",
       )}
       aria-label={srText}>
-      <div
-        className={classNames(
-          "bg-indigo-600",
-          "hover:bg-indigo-800",
-          size === "small" ? "p-1 min-h-[20]" : "p-1 min-h-[24]",
-          shape,
-        )}>
+      {/* Animated background overlay for primary variant */}
+      {variant === "primary" && (
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 -skew-x-12" />
+      )}
+
+      <div className="relative z-10 transition-transform duration-200 group-hover:scale-110">
         {isLoading ? <ButtonLoader color="primary" size={size} /> : label}
       </div>
     </button>

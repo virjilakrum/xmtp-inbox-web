@@ -107,7 +107,7 @@ const ErrorBoundary: React.FC<ErrorBoundaryProps> = ({
         {isInstallationLimitError ? (
           <div className="installation-limit-error">
             <p className="error-message" style={messageStyles}>
-              This wallet address has reached the maximum number of XMTP
+              This wallet address has reached the maximum number of zkλ
               installations (5/5).
             </p>
 
@@ -118,7 +118,7 @@ const ErrorBoundary: React.FC<ErrorBoundaryProps> = ({
               <ul style={{ paddingLeft: "20px", lineHeight: "1.6" }}>
                 <li style={{ marginBottom: "8px" }}>
                   <strong>Clear local data:</strong> This will clear your local
-                  XMTP data and may allow you to reconnect
+                  zkλ data and may allow you to reconnect
                 </li>
                 <li style={{ marginBottom: "8px" }}>
                   <strong>Use a different wallet:</strong> Switch to a different

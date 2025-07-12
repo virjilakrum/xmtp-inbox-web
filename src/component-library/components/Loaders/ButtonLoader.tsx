@@ -1,6 +1,3 @@
-import { classNames } from "../../../helpers";
-import styles from "./Loaders.module.css";
-
 interface ButtonLoaderProps {
   /**
    * What color should the loader/spinner be?
@@ -13,22 +10,34 @@ interface ButtonLoaderProps {
 }
 
 /**
- * Primary UI component for user interaction
+ * Modern button loader component with Tailwind animations
  */
 export const ButtonLoader = ({
-  size,
+  size = "large",
   color = "primary",
-}: ButtonLoaderProps) => (
-  // To-do: Change to proper loader once designs are finished
-  <div className="flex flex-row">
-    <div
-      className={classNames(
-        "rounded-full",
-        styles.btnLoader,
-        color === "primary" ? styles.btnLoaderLight : styles.btnLoaderDark,
-        size === "small" ? styles.btnLoaderXs : styles.btnLoaderSm,
-        styles.animateSpin,
-      )}
-    />
-  </div>
-);
+}: ButtonLoaderProps) => {
+  const sizeClasses = {
+    small: "w-4 h-4 border-2",
+    large: "w-5 h-5 border-2",
+  };
+
+  const colorClasses = {
+    primary: "border-white/30 border-t-white",
+    secondary: "border-gray-300 border-t-gray-700",
+  };
+
+  return (
+    <div className="flex justify-center items-center">
+      <div
+        className={`
+          rounded-full animate-spin transition-all duration-200
+          ${sizeClasses[size]}
+          ${colorClasses[color]}
+        `}
+        style={{
+          animation: "spin 1s linear infinite",
+        }}
+      />
+    </div>
+  );
+};

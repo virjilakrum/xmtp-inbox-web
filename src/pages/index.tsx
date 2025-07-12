@@ -1,7 +1,8 @@
 import { useEffect } from "react";
-import { useConnect, useConnectors } from "wagmi";
+import { useConnect, useConnectors, useDisconnect } from "wagmi";
 import { useClient } from "../hooks/useV3Hooks";
 import { useXmtpV3Context } from "../context/XmtpV3Provider";
+import { useXmtpStore } from "../store/xmtp";
 import { OnboardingPage } from "../component-library/pages/OnboardingPage/OnboardingPage";
 import ErrorBoundary from "../component-library/components/ErrorBoundary/ErrorBoundary";
 import InboxPage from "./inbox";
@@ -9,6 +10,7 @@ import InboxPage from "./inbox";
 const Index = () => {
   const client = useClient();
   const { connect } = useConnect();
+  const { disconnect: disconnectWallet } = useDisconnect();
   const connectors = useConnectors();
   const {
     isLoading,
@@ -20,7 +22,10 @@ const Index = () => {
     isInstallationLimitError,
     handleInstallationLimitRecovery,
     clearLocalData,
+    disconnect: disconnectXmtp,
   } = useXmtpV3Context();
+
+  const resetXmtpState = useXmtpStore((s) => s.resetXmtpState);
 
   useEffect(() => {
     console.log("Index - Debug state:", {
@@ -92,6 +97,31 @@ const Index = () => {
     }
   };
 
+  const handleDisconnect = async () => {
+    try {
+      console.log("Index - Starting disconnect process");
+
+      // Reset XMTP state first
+      resetXmtpState();
+
+      // Disconnect XMTP client if it exists
+      if (client) {
+        console.log("Index - Disconnecting XMTP client");
+        await disconnectXmtp();
+      }
+
+      // Disconnect wallet
+      console.log("Index - Disconnecting wallet");
+      disconnectWallet();
+
+      console.log("Index - Disconnect process completed");
+    } catch (error) {
+      console.error("Index - Error during disconnect:", error);
+      // Even if XMTP disconnect fails, still disconnect wallet
+      disconnectWallet();
+    }
+  };
+
   // Show error boundary for installation limit errors
   if (error && isInstallationLimitError) {
     return (
@@ -113,10 +143,7 @@ const Index = () => {
         onConnect={handleConnect}
         onCreate={handleCreateOrEnable}
         onEnable={handleCreateOrEnable}
-        onDisconnect={() => {
-          console.log("Disconnect requested");
-          // Handle disconnect
-        }}
+        onDisconnect={handleDisconnect}
       />
     );
   }

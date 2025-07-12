@@ -68,7 +68,7 @@ export const AddressInput = ({
     <div
       className={classNames(
         !resolvedAddress?.displayAddress
-          ? "bg-indigo-50 border-b border-indigo-500"
+          ? "bg-gray-50 border-b border-gray-500"
           : "border-b border-gray-200",
         "flex items-center px-2 md:px-4 py-3 border-l-0 z-10 max-h-sm w-full h-16",
       )}>

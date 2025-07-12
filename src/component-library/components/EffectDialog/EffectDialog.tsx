@@ -10,7 +10,7 @@ export const EffectDialog = ({
     style={{
       width: 200,
       height: 150,
-      border: "1px dotted indigo",
+      border: "1px dotted gray",
       borderRadius: "16px",
       position: "absolute",
       bottom: "200px",
@@ -24,7 +24,7 @@ export const EffectDialog = ({
         **Let it Snow**
       </button>
       <button type="button" onClick={() => handleSendEffect("RAIN")}>
-        Make it Rain XMTP!
+        Make it Rain zkλ!
       </button>
     </div>
   </dialog>

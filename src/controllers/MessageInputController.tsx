@@ -1,18 +1,17 @@
-import type { Attachment } from "@xmtp/content-type-remote-attachment";
 import { useState } from "react";
-import { useStartConversation } from "../hooks/useV3Hooks";
 import { MessageInput } from "../component-library/components/MessageInput/MessageInput";
 import { InboxNotFoundError } from "../component-library/components/ErrorBoundary/InboxNotFoundError";
-import useSendMessage from "../hooks/useSendMessage";
-import useSelectedConversation from "../hooks/useSelectedConversation";
+import { useStartConversation, useSendMessage } from "../hooks/useV3Hooks";
 import { useXmtpStore } from "../store/xmtp";
+import useSelectedConversation from "../hooks/useSelectedConversation";
+import type { Attachment } from "@xmtp/content-type-remote-attachment";
 
 interface MessageInputControllerProps {
   attachment?: Attachment;
   attachmentPreview?: string;
   setAttachment: (attachment: Attachment | undefined) => void;
-  setAttachmentPreview: (url: string | undefined) => void;
-  setIsDragActive: (status: boolean) => void;
+  setAttachmentPreview: (preview: string | undefined) => void;
+  setIsDragActive: (active: boolean) => void;
 }
 
 export const MessageInputController = ({
@@ -23,8 +22,9 @@ export const MessageInputController = ({
   setIsDragActive,
 }: MessageInputControllerProps) => {
   const { startConversation } = useStartConversation();
-  const recipientAddress = useXmtpStore((s) => s.recipientAddress);
   const { sendMessage } = useSendMessage();
+  const recipientAddress = useXmtpStore((s) => s.recipientAddress);
+  const conversationTopic = useXmtpStore((s) => s.conversationTopic);
   const { conversation } = useSelectedConversation();
   const [inboxNotFoundError, setInboxNotFoundError] = useState<string | null>(
     null,
@@ -33,35 +33,39 @@ export const MessageInputController = ({
   // V3 message input logic - handles sending messages and attachments
   const handleSendMessage = async (message: string) => {
     try {
-      let activeConversation = conversation;
+      let targetConversation = conversation;
+      let targetConversationId = conversationTopic;
 
-      // If no conversation selected, start a new one
-      if (!activeConversation && recipientAddress) {
+      // If no conversation is selected but we have a recipient address, start new conversation
+      if (!targetConversation && !targetConversationId && recipientAddress) {
         console.log(
           "V3 message input - starting new conversation with:",
           recipientAddress,
         );
         const result = await startConversation(recipientAddress);
-        // Map V3 conversation to CachedConversationWithId format
-        activeConversation = {
-          conversation: result.conversation as any,
-          peerAddress: recipientAddress,
-          id: result.conversation.id || recipientAddress,
-        };
+        targetConversation = result.conversation;
+        targetConversationId = result.conversation.id;
+
+        // Update the conversation topic in store
+        useXmtpStore.getState().setConversationTopic(targetConversationId);
       }
 
-      if (activeConversation) {
+      // Use conversation from selected conversation or conversation ID
+      const conversationId = targetConversationId || targetConversation?.id;
+
+      if (conversationId) {
         console.log("V3 message input - sending message:", message);
-        await sendMessage(
-          (activeConversation.conversation || activeConversation) as any,
-          message,
-        );
+        await sendMessage(conversationId, message);
 
         // Clear attachment after sending
         if (attachment) {
           setAttachment(undefined);
           setAttachmentPreview(undefined);
         }
+
+        console.log("V3 message input - message sent successfully");
+      } else {
+        throw new Error("No conversation available to send message");
       }
     } catch (error) {
       console.error("Error sending message:", error);
@@ -69,8 +73,16 @@ export const MessageInputController = ({
       // Check if it's a "No inbox found" error
       if (error instanceof Error && error.message.includes("No inbox found")) {
         setInboxNotFoundError(recipientAddress || "Unknown address");
+      } else {
+        // For other errors, you might want to show a general error message
+        console.error("Failed to send message:", error);
       }
     }
+  };
+
+  const handleRetryMessage = () => {
+    setInboxNotFoundError(null);
+    // Could implement retry logic here if needed
   };
 
   return (
@@ -87,11 +99,7 @@ export const MessageInputController = ({
       {inboxNotFoundError && (
         <InboxNotFoundError
           recipientAddress={inboxNotFoundError}
-          onRetry={() => {
-            setInboxNotFoundError(null);
-            // Retry sending the message
-            handleSendMessage("Retry message");
-          }}
+          onRetry={handleRetryMessage}
           onClose={() => setInboxNotFoundError(null)}
         />
       )}

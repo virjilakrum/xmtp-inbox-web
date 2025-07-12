@@ -218,12 +218,23 @@ export const throttledFetchUnsAddress = memoizeThrottle(
 
 export const isValidLongWalletAddress = (
   address: string,
-): address is ETHAddress => address.startsWith("0x") && address.length === 42;
+): address is ETHAddress => {
+  // Safety check to ensure address is a string
+  if (typeof address !== "string") {
+    return false;
+  }
+  return address.startsWith("0x") && address.length === 42;
+};
 
 export const isValidRecipientAddressFormat = (address: string) =>
   isEnsName(address) || isUnsName(address) || isValidLongWalletAddress(address);
 
-export const shortAddress = (address: string): string =>
-  isValidLongWalletAddress(address)
+export const shortAddress = (address: string): string => {
+  // Safety check to ensure address is a string
+  if (typeof address !== "string") {
+    return "Invalid Address";
+  }
+  return isValidLongWalletAddress(address)
     ? `${address.substring(0, 6)}...${address.substring(address.length - 4)}`
     : address;
+};
