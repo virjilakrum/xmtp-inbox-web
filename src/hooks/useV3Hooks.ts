@@ -291,38 +291,94 @@ export const useStreamAllMessages = () => {
   const client = useClient();
   const [messages, setMessages] = useState<any[]>([]);
   const [error, setError] = useState<Error | null>(null);
+  const [isStreaming, setIsStreaming] = useState(false);
 
   useEffect(() => {
-    if (!client) return;
+    if (!client) {
+      setIsStreaming(false);
+      return;
+    }
+
+    let cleanup: (() => void) | null = null;
+    let streamClosed = false;
 
     const setupStream = async () => {
       try {
-        // V3 conversations.streamAllMessages() returns a Promise<AsyncStream>
+        console.log("🔄 Setting up V3 message streaming...");
+        setError(null);
+        setIsStreaming(true);
+
+        // V3 conversations.streamAllMessages() with proper callback handling
         const stream = await client.conversations.streamAllMessages(
-          (message) => {
-            if (message) {
-              setMessages((prev) => [...prev, message]);
+          (message: any) => {
+            if (message && !streamClosed) {
+              console.log("📨 Real-time message received:", {
+                id: message.id,
+                content: message.content,
+                sender: message.senderInboxId,
+                conversation: message.conversationId,
+              });
+
+              setMessages((prev) => {
+                // Avoid duplicates by checking if message already exists
+                const messageExists = prev.some(
+                  (msg: any) => msg.id === message.id,
+                );
+                if (messageExists) {
+                  console.log("🔄 Message already exists, skipping duplicate");
+                  return prev;
+                }
+                return [...prev, message];
+              });
             }
           },
         );
 
-        return () => {
-          // Clean up stream
+        console.log("✅ V3 message streaming established");
+
+        // Set up cleanup function
+        cleanup = () => {
+          streamClosed = true;
+          setIsStreaming(false);
           if (stream && typeof stream.return === "function") {
             stream.return();
+            console.log("🔄 Message stream closed");
           }
         };
       } catch (err) {
-        setError(
-          err instanceof Error ? err : new Error("Failed to stream messages"),
-        );
+        const error =
+          err instanceof Error ? err : new Error("Failed to stream messages");
+        console.error("❌ Message streaming setup failed:", error);
+        setError(error);
+        setIsStreaming(false);
       }
     };
 
     setupStream();
+
+    // Cleanup on unmount or client change
+    return () => {
+      if (cleanup) {
+        cleanup();
+      }
+    };
   }, [client]);
 
-  return { messages, error };
+  // Clear messages when client changes
+  useEffect(() => {
+    if (!client) {
+      setMessages([]);
+      setError(null);
+      setIsStreaming(false);
+    }
+  }, [client]);
+
+  return {
+    messages,
+    error,
+    isStreaming,
+    messageCount: messages.length,
+  };
 };
 
 // V3 equivalent of useReplies from V2

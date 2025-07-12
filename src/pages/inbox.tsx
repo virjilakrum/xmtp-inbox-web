@@ -17,7 +17,12 @@ import { useAttachmentChange } from "../hooks/useAttachmentChange";
 import useSelectedConversation from "../hooks/useSelectedConversation";
 import { ReplyThread } from "../component-library/components/ReplyThread/ReplyThread";
 // V3 imports
-import { useConsent, useClient, useConversations } from "../hooks/useV3Hooks";
+import {
+  useConsent,
+  useClient,
+  useConversations,
+  useStreamAllMessages,
+} from "../hooks/useV3Hooks";
 
 const Inbox: React.FC<{ children?: React.ReactNode }> = () => {
   const navigate = useNavigate();
@@ -32,6 +37,14 @@ const Inbox: React.FC<{ children?: React.ReactNode }> = () => {
   // V3 useStreamConversations implemented via useConversations hook
   // The useConversations hook already provides real-time conversation updates
 
+  // **FIX**: Add real-time message streaming to receive messages instantly
+  const {
+    messages: streamedMessages,
+    error: streamError,
+    isStreaming,
+    messageCount,
+  } = useStreamAllMessages();
+
   const { consent, allow, deny } = useConsent();
 
   useEffect(() => {
@@ -43,6 +56,35 @@ const Inbox: React.FC<{ children?: React.ReactNode }> = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client]);
+
+  // **FIX**: Handle real-time message streaming with better UI updates
+  useEffect(() => {
+    if (streamedMessages.length > 0) {
+      const latestMessage = streamedMessages[streamedMessages.length - 1];
+      console.log("📨 New message received via stream:", {
+        id: latestMessage.id,
+        content: latestMessage.content,
+        sender: latestMessage.senderInboxId,
+        conversation: latestMessage.conversationId,
+      });
+
+      // Trigger a re-render of conversation list to show new message
+      // This is more reliable than changing hash
+      const event = new CustomEvent("xmtp-message-received", {
+        detail: { message: latestMessage },
+      });
+      window.dispatchEvent(event);
+    }
+  }, [streamedMessages]);
+
+  // **FIX**: Handle streaming errors with user feedback
+  useEffect(() => {
+    if (streamError) {
+      console.error("❌ Message streaming error:", streamError);
+      // Could show user notification about connection issues
+      // For now, just log the error - in production you might want to show a toast
+    }
+  }, [streamError]);
 
   // Load V3 consent preferences
   const loadConsentList = async () => {
@@ -66,7 +108,15 @@ const Inbox: React.FC<{ children?: React.ReactNode }> = () => {
     // V3 conversation monitoring is handled automatically by useConversations hook
     // The hook provides real-time updates when conversations change
     console.log("V3 conversation monitoring active via useConversations hook");
-  }, [client]);
+
+    // **FIX**: Enhanced streaming status logging
+    console.log("📡 Real-time message streaming status:", {
+      isActive: isStreaming,
+      totalMessages: messageCount,
+      hasError: !!streamError,
+      errorMessage: streamError?.message,
+    });
+  }, [client, isStreaming, messageCount, streamError]);
 
   const activeTab = useXmtpStore((s) => s.activeTab);
   const setActiveMessage = useXmtpStore((s) => s.setActiveMessage);
