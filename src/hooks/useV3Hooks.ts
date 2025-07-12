@@ -198,7 +198,9 @@ export const useStartConversation = () => {
               identifier: peerAddress,
             });
             if (!foundInboxId) {
-              throw new Error("No inbox found for this address");
+              throw new Error(
+                `No inbox found for address: ${peerAddress}. This address needs to connect to XMTP first.`,
+              );
             }
             inboxId = foundInboxId;
           }

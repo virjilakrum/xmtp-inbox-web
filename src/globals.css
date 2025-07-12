@@ -2,11 +2,154 @@
 @tailwind components;
 @tailwind utilities;
 
-.interweave-content > span > a {
-  @apply font-medium;
-  @apply underline;
+@layer base {
+  html {
+    font-family:
+      -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+      Arial, sans-serif;
+  }
+
+  body {
+    @apply bg-gradient-to-br from-slate-50 to-slate-100 text-gray-900;
+    min-height: 100vh;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
 }
 
-.interweave-content > span > span {
-  @apply ml-1;
+@layer components {
+  /* Modern gradient backgrounds */
+  .gradient-primary {
+    @apply bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600;
+  }
+
+  .gradient-secondary {
+    @apply bg-gradient-to-r from-emerald-500 to-blue-600;
+  }
+
+  .gradient-surface {
+    @apply bg-gradient-to-br from-white/80 to-white/60 backdrop-blur-sm;
+  }
+
+  /* Glass morphism effect */
+  .glass {
+    @apply bg-white/20 backdrop-blur-md border border-white/30 shadow-xl;
+  }
+
+  /* Modern shadows */
+  .shadow-modern {
+    box-shadow:
+      0 20px 25px -5px rgba(0, 0, 0, 0.1),
+      0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  }
+
+  .shadow-elegant {
+    box-shadow:
+      0 10px 15px -3px rgba(0, 0, 0, 0.1),
+      0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  }
+
+  /* Improved message styling */
+  .message-bubble {
+    @apply rounded-2xl px-4 py-2 max-w-xs shadow-elegant;
+  }
+
+  .message-sent {
+    @apply gradient-primary text-white ml-auto;
+  }
+
+  .message-received {
+    @apply bg-white border border-gray-200 text-gray-900;
+  }
+
+  /* Modern input styling */
+  .modern-input {
+    @apply bg-white/80 backdrop-blur-sm border border-gray-200 rounded-xl px-4 py-3 
+           focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none
+           shadow-elegant transition-all duration-200;
+  }
+
+  /* Loading states */
+  .pulse-modern {
+    @apply animate-pulse bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 bg-[length:200%_100%];
+    animation: pulse-slide 1.5s ease-in-out infinite;
+  }
+
+  /* Navigation improvements */
+  .nav-item {
+    @apply p-3 rounded-xl transition-all duration-200 hover:bg-white/50 hover:shadow-elegant;
+  }
+
+  .nav-item-active {
+    @apply gradient-surface shadow-elegant border border-white/30;
+  }
+}
+
+@layer utilities {
+  /* Custom animations */
+  @keyframes pulse-slide {
+    0%,
+    100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes fade-in-scale {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  .animate-fade-in-up {
+    animation: fade-in-up 0.5s ease-out;
+  }
+
+  .animate-fade-in-scale {
+    animation: fade-in-scale 0.3s ease-out;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-100/50;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-400;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .message-bubble {
+    @apply max-w-[80%];
+  }
 }
