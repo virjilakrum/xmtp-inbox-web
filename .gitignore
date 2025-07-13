@@ -58,6 +58,5 @@ coverage
 # Vite
 dist
 
-# Environment
-.env*
+
 
