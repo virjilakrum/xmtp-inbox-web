@@ -3,16 +3,59 @@ import { CachedConversationWithId } from "../types/xmtpV3Types";
 import { ConversationList } from "../component-library/components/ConversationList/ConversationList";
 import { MessagePreviewCard } from "../component-library/components/MessagePreviewCard/MessagePreviewCard";
 import { useXmtpStore } from "../store/xmtp";
-import { useMemo, useCallback } from "react";
-import { shortAddress } from "../helpers";
+import { useMemo, useCallback, memo } from "react";
+import { shortAddress, safeConvertTimestamp } from "../helpers";
 
-export const ConversationListController = () => {
+// Performance optimization: Memoized conversation item to prevent unnecessary re-renders
+const MemoizedMessagePreviewCard = memo(MessagePreviewCard);
+
+// Performance optimization: Memoized conversation processor
+const processConversationData = (conversation: any) => {
+  const conversationId = conversation.id || "";
+  const peerInboxId = conversation.peerInboxId || "";
+  const lastMessage = conversation.lastMessage;
+
+  // Get display text - last message content or placeholder
+  const messageText = lastMessage?.content
+    ? String(lastMessage.content).slice(0, 100) // Truncate long messages
+    : "Start a conversation...";
+
+  // Get timestamp - last message time or conversation created time (safely)
+  const messageTime = lastMessage?.sentAtNs
+    ? safeConvertTimestamp(lastMessage.sentAtNs)
+    : conversation.createdAtNs
+      ? safeConvertTimestamp(conversation.createdAtNs)
+      : new Date();
+
+  // Get display address - safely handle peerInboxId and ensure it's a string
+  const safeAddress =
+    peerInboxId && typeof peerInboxId === "string"
+      ? peerInboxId
+      : conversationId;
+  const displayAddress =
+    safeAddress && typeof safeAddress === "string"
+      ? shortAddress(safeAddress)
+      : "Unknown";
+
+  return {
+    conversationId,
+    peerInboxId,
+    lastMessage,
+    messageText,
+    messageTime,
+    safeAddress,
+    displayAddress,
+  };
+};
+
+export const ConversationListController = memo(() => {
   const { conversations, isLoading } = useConversations();
   const activeTab = useXmtpStore((s) => s.activeTab);
+  const conversationTopic = useXmtpStore((s) => s.conversationTopic);
   const setActiveTab = useXmtpStore((s) => s.setActiveTab);
   const setConversationTopic = useXmtpStore((s) => s.setConversationTopic);
 
-  // Filter conversations based on active tab
+  // Performance optimization: Memoized conversation filtering
   const filteredConversations = useMemo(() => {
     if (!conversations.length) return [];
 
@@ -37,83 +80,87 @@ export const ConversationListController = () => {
     });
   }, [conversations, activeTab]);
 
-  // Handle conversation click
+  // Performance optimization: Memoized conversation click handler
   const handleConversationClick = useCallback(
     (conversationId: string) => {
+      console.log("🔄 Conversation selected:", conversationId);
       setConversationTopic(conversationId);
     },
     [setConversationTopic],
   );
 
-  // Convert filtered conversations to MessagePreviewCard components
+  // Performance optimization: Memoized allow handler
+  const handleAllow = useCallback(() => {
+    return Promise.resolve();
+  }, []);
+
+  // Performance optimization: Memoized first message handler
+  const handleStartedFirstMessage = useCallback(() => {
+    const setStartedFirstMessage =
+      useXmtpStore.getState().setStartedFirstMessage;
+    setStartedFirstMessage(true);
+  }, []);
+
+  // Performance optimization: Memoized conversation processing and rendering
   const conversationMessages = useMemo(() => {
+    console.log("🔄 Processing", filteredConversations.length, "conversations");
+
     return filteredConversations.map((conversation: any) => {
-      // Extract conversation data for V3
-      const conversationId = conversation.id || "";
-      const peerInboxId = conversation.peerInboxId || "";
-      const lastMessage = conversation.lastMessage;
-
-      // Get display text - last message content or placeholder
-      const messageText = lastMessage?.content
-        ? String(lastMessage.content).slice(0, 100) // Truncate long messages
-        : "Start a conversation...";
-
-      // Get timestamp - last message time or conversation created time
-      const messageTime = lastMessage?.sentAtNs
-        ? new Date(Number(lastMessage.sentAtNs) / 1000000) // Convert nanoseconds to milliseconds
-        : conversation.createdAtNs
-          ? new Date(Number(conversation.createdAtNs) / 1000000)
-          : new Date();
-
-      // Get display address - safely handle peerInboxId and ensure it's a string
-      const safeAddress =
-        peerInboxId && typeof peerInboxId === "string"
-          ? peerInboxId
-          : conversationId;
-      const displayAddress =
-        safeAddress && typeof safeAddress === "string"
-          ? shortAddress(safeAddress)
-          : "Unknown";
-
-      // Get conversation topic for selection state
-      const conversationTopic = useXmtpStore.getState().conversationTopic;
-      const isSelected = conversationTopic === conversationId;
+      const processedData = processConversationData(conversation);
+      const isSelected = conversationTopic === processedData.conversationId;
 
       return (
-        <MessagePreviewCard
-          key={conversationId}
-          address={safeAddress || conversationId}
-          displayAddress={displayAddress}
-          text={messageText}
-          datetime={messageTime}
+        <MemoizedMessagePreviewCard
+          key={processedData.conversationId}
+          address={processedData.safeAddress || processedData.conversationId}
+          displayAddress={processedData.displayAddress}
+          text={processedData.messageText}
+          datetime={processedData.messageTime}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
-          allow={() => Promise.resolve()}
+          allow={handleAllow}
           isLoading={false}
           isSelected={isSelected}
-          onClick={() => handleConversationClick(conversationId)}
+          onClick={() => handleConversationClick(processedData.conversationId)}
           avatarUrl="" // Could be enhanced with avatar lookup
           conversationDomain="" // Could show app domain if available
           pinned={false} // Could implement pinning feature
         />
       );
     });
-  }, [filteredConversations, activeTab, setActiveTab, handleConversationClick]);
+  }, [
+    filteredConversations,
+    activeTab,
+    conversationTopic,
+    setActiveTab,
+    handleConversationClick,
+    handleAllow,
+  ]);
+
+  // Performance optimization: Memoized loading state
+  const isShowingLoading = useMemo(() => {
+    return isLoading || conversationMessages.length === 0;
+  }, [isLoading, conversationMessages.length]);
+
+  console.log("🔄 ConversationListController render:", {
+    conversationCount: conversations.length,
+    filteredCount: filteredConversations.length,
+    activeTab,
+    isLoading,
+  });
 
   return (
     <ConversationList
       messages={conversationMessages}
-      isLoading={isLoading}
+      isLoading={isShowingLoading}
       activeTab={activeTab}
       hasRecipientEnteredValue={false}
-      setStartedFirstMessage={() => {
-        // Set the started first message state to show the message input
-        const setStartedFirstMessage =
-          useXmtpStore.getState().setStartedFirstMessage;
-        setStartedFirstMessage(true);
-      }}
+      setStartedFirstMessage={handleStartedFirstMessage}
     />
   );
-};
+});
+
+// Performance optimization: Display name for debugging
+ConversationListController.displayName = "ConversationListController";
 
 export default ConversationListController;

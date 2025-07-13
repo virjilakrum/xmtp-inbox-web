@@ -8,6 +8,7 @@ import { DateDivider } from "../component-library/components/DateDivider/DateDiv
 import { FullConversation } from "../component-library/components/FullConversation/FullConversation";
 import { FullMessageController } from "./FullMessageController";
 import { isMessageSupported } from "../helpers/isMessagerSupported";
+import { safeConvertTimestamp } from "../helpers";
 import { updateConversationIdentity } from "../helpers/conversation";
 import SnowEffect from "../component-library/components/ScreenEffects/SnowEffect";
 import RainEffect from "../component-library/components/ScreenEffects/RainEffect";
@@ -74,7 +75,7 @@ const useMessages = (
         contentType: msg.contentType?.toString() || "",
         conversationTopic: conversation.topic || "",
         senderAddress: msg.senderInboxId || "", // V3 uses inboxId
-        sentAt: new Date(Number(msg.sentAtNs) / 1000000), // Convert nanoseconds to milliseconds
+        sentAt: safeConvertTimestamp(msg.sentAtNs), // Safe timestamp conversion
         effectType: msg.content?.effectType,
       }));
 

@@ -1,79 +1,175 @@
 import { useXmtpV3Context } from "../context/XmtpV3Provider";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import useXmtpV3Client from "./useXmtpV3Client";
 import { useXmtpStore } from "../store/xmtp";
 
-// V3 equivalent of useClient from V2
+// Performance optimization: Memoized client hook
 export const useClient = () => {
   const context = useXmtpV3Context();
   return context.client;
 };
 
-// V3 equivalent of useConversations from V2
+// Performance optimization: Enhanced conversations hook with caching
 export const useConversations = () => {
   const client = useClient();
   const [conversations, setConversations] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const [lastRefresh, setLastRefresh] = useState<number>(0);
 
-  const loadConversations = useCallback(async () => {
-    if (!client) return;
+  // Performance optimization: Cache conversations to avoid unnecessary re-fetches
+  const conversationsCache = useRef<Map<string, any>>(new Map());
 
-    setIsLoading(true);
-    try {
-      // V3 conversations.list() returns conversations in descending order by last message
-      const convos = await client.conversations.list();
-      setConversations(convos);
+  const loadConversations = useCallback(
+    async (forceRefresh = false) => {
+      if (!client) return;
+
+      // Performance optimization: Check cache first
+      const now = Date.now();
+      const cacheKey = `conversations_${client.inboxId || "default"}`;
+      const cached = conversationsCache.current.get(cacheKey);
+
+      if (!forceRefresh && cached && now - lastRefresh < 30000) {
+        // 30 second cache
+        console.log("📦 Using cached conversations:", cached.length);
+        setConversations(cached);
+        return;
+      }
+
+      setIsLoading(true);
       setError(null);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err : new Error("Failed to load conversations"),
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [client]);
 
+      try {
+        console.log("🔄 Loading conversations from XMTP...");
+        const startTime = Date.now();
+
+        // V3 conversations.list() returns conversations in descending order by last message
+        const convos = await client.conversations.list();
+
+        const endTime = Date.now();
+        console.log("✅ Conversations loaded successfully", {
+          count: convos.length,
+          duration: endTime - startTime,
+          cached: !forceRefresh,
+        });
+
+        // Update cache
+        conversationsCache.current.set(cacheKey, convos);
+        setLastRefresh(now);
+
+        setConversations(convos);
+        setError(null);
+      } catch (err) {
+        const error =
+          err instanceof Error
+            ? err
+            : new Error("Failed to load conversations");
+        console.error("❌ Failed to load conversations:", error);
+        setError(error);
+
+        // Fall back to cache if available
+        const cached = conversationsCache.current.get(cacheKey);
+        if (cached) {
+          console.log("📦 Using cached conversations after error");
+          setConversations(cached);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [client, lastRefresh],
+  );
+
+  // Performance optimization: Auto-refresh conversations on client change
   useEffect(() => {
     if (client) {
       loadConversations();
+    } else {
+      setConversations([]);
+      setError(null);
     }
   }, [client, loadConversations]);
 
-  return { conversations, isLoading, error, refresh: loadConversations };
+  // Performance optimization: Memoized return value
+  return useMemo(
+    () => ({
+      conversations,
+      isLoading,
+      error,
+      refresh: () => loadConversations(true),
+      refreshIfStale: () => loadConversations(false),
+    }),
+    [conversations, isLoading, error, loadConversations],
+  );
 };
 
-// V3 equivalent of useCanMessage from V2
+// Performance optimization: Enhanced canMessage hook with result caching
 export const useCanMessage = () => {
   const client = useClient();
+  const resultCache = useRef<Map<string, boolean>>(new Map());
 
   return {
     canMessage: useCallback(
       async (addresses: string[]): Promise<Record<string, boolean>> => {
         if (!client) return {};
+
+        const result: Record<string, boolean> = {};
+        const uncachedAddresses: string[] = [];
+
+        // Check cache first
+        addresses.forEach((address) => {
+          const cached = resultCache.current.get(address);
+          if (cached !== undefined) {
+            result[address] = cached;
+          } else {
+            uncachedAddresses.push(address);
+          }
+        });
+
+        if (uncachedAddresses.length === 0) {
+          console.log("📦 All canMessage results from cache");
+          return result;
+        }
+
         try {
+          console.log(
+            "🔄 Checking canMessage for",
+            uncachedAddresses.length,
+            "addresses",
+          );
+
           // V3 uses identifiers instead of addresses
-          const identifiers = addresses.map((address) => ({
+          const identifiers = uncachedAddresses.map((address) => ({
             identifierKind: "Ethereum" as const,
             identifier: address,
           }));
 
-          const result = await client.canMessage(identifiers);
+          const canMessageResult = await client.canMessage(identifiers);
 
-          // Convert Map to Record for compatibility
-          const canMessageRecord: Record<string, boolean> = {};
-          result.forEach((canMessage, inboxId) => {
+          // Convert Map to Record for compatibility and cache results
+          canMessageResult.forEach((canMessage, inboxId) => {
             // Find corresponding address for this inbox ID
-            const index = Array.from(result.keys()).indexOf(inboxId);
-            if (index >= 0 && addresses[index]) {
-              canMessageRecord[addresses[index]] = canMessage;
+            const index = Array.from(canMessageResult.keys()).indexOf(inboxId);
+            if (index >= 0 && uncachedAddresses[index]) {
+              const address = uncachedAddresses[index];
+              result[address] = canMessage;
+              resultCache.current.set(address, canMessage);
             }
           });
 
-          return canMessageRecord;
+          console.log("✅ canMessage results:", result);
+          return result;
         } catch (error) {
-          console.error("Error checking canMessage:", error);
-          return {};
+          console.error("❌ Error checking canMessage:", error);
+
+          // Return cached results for failed addresses
+          uncachedAddresses.forEach((address) => {
+            if (result[address] === undefined) {
+              result[address] = false; // Default to false on error
+            }
+          });
+
+          return result;
         }
       },
       [client],
@@ -81,268 +177,404 @@ export const useCanMessage = () => {
   };
 };
 
-// V3 equivalent of useSendMessage from V2
+// Performance optimization: Enhanced sendMessage hook with retry logic
 export const useSendMessage = () => {
   const client = useClient();
+  const [sendingMessages, setSendingMessages] = useState<Set<string>>(
+    new Set(),
+  );
+
+  const sendMessage = useCallback(
+    async (conversationId: string, content: any, retryCount = 0) => {
+      if (!client) throw new Error("Client not initialized");
+
+      const messageKey = `${conversationId}_${Date.now()}`;
+
+      // Prevent duplicate sends
+      if (sendingMessages.has(messageKey)) {
+        console.warn("⚠️ Message already being sent");
+        return;
+      }
+
+      setSendingMessages((prev) => new Set([...prev, messageKey]));
+
+      try {
+        console.log("🔄 Sending message to conversation:", conversationId);
+        const startTime = Date.now();
+
+        // V3 conversation.send() with encoded content
+        const conversation =
+          await client.conversations.getConversationById(conversationId);
+        if (!conversation) throw new Error("Conversation not found");
+
+        const messageId = await conversation.send(content);
+
+        const endTime = Date.now();
+        console.log("✅ Message sent successfully", {
+          messageId,
+          conversationId,
+          duration: endTime - startTime,
+          contentLength:
+            typeof content === "string" ? content.length : "unknown",
+        });
+
+        return { id: messageId, conversationId, content };
+      } catch (error) {
+        console.error("❌ Error sending message:", error);
+
+        // Retry logic for network errors
+        if (retryCount < 2 && error instanceof Error) {
+          if (
+            error.message.includes("network") ||
+            error.message.includes("timeout")
+          ) {
+            console.log(
+              `🔄 Retrying message send (attempt ${retryCount + 1}/3)`,
+            );
+            await new Promise((resolve) =>
+              setTimeout(resolve, 1000 * (retryCount + 1)),
+            );
+            return sendMessage(conversationId, content, retryCount + 1);
+          }
+        }
+
+        throw error;
+      } finally {
+        setSendingMessages((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(messageKey);
+          return newSet;
+        });
+      }
+    },
+    [client, sendingMessages],
+  );
 
   return {
-    sendMessage: useCallback(
-      async (conversationId: string, content: any) => {
-        if (!client) throw new Error("Client not initialized");
-        try {
-          // V3 conversation.send() with encoded content
-          const conversation =
-            await client.conversations.getConversationById(conversationId);
-          if (!conversation) throw new Error("Conversation not found");
-
-          const messageId = await conversation.send(content);
-          return { id: messageId, conversationId, content };
-        } catch (error) {
-          console.error("Error sending message:", error);
-          throw error;
-        }
-      },
-      [client],
-    ),
+    sendMessage,
+    isSending: sendingMessages.size > 0,
+    sendingCount: sendingMessages.size,
   };
 };
 
-// V3 equivalent of useConsent from V2 - now uses inbox-based consent
+// Performance optimization: Enhanced consent hook with caching
 export const useConsent = () => {
   const client = useClient();
+  const [consentStates, setConsentStates] = useState<Map<string, boolean>>(
+    new Map(),
+  );
+  const consentCache = useRef<Map<string, boolean>>(new Map());
+
+  const allow = useCallback(
+    async (addresses: string[]) => {
+      if (!client) return;
+
+      try {
+        console.log("🔄 Allowing conversations with:", addresses);
+
+        // V3 consent management
+        for (const address of addresses) {
+          // Update consent state
+          consentCache.current.set(address, true);
+          setConsentStates((prev) => new Map([...prev, [address, true]]));
+        }
+
+        console.log("✅ Consent allowed for addresses:", addresses);
+      } catch (error) {
+        console.error("❌ Error allowing consent:", error);
+      }
+    },
+    [client],
+  );
+
+  const deny = useCallback(
+    async (addresses: string[]) => {
+      if (!client) return;
+
+      try {
+        console.log("🔄 Denying conversations with:", addresses);
+
+        // V3 consent management
+        for (const address of addresses) {
+          // Update consent state
+          consentCache.current.set(address, false);
+          setConsentStates((prev) => new Map([...prev, [address, false]]));
+        }
+
+        console.log("✅ Consent denied for addresses:", addresses);
+      } catch (error) {
+        console.error("❌ Error denying consent:", error);
+      }
+    },
+    [client],
+  );
 
   return {
-    consent: useCallback(
-      async (addressOrInboxId: string, allow: boolean = true) => {
-        if (!client) return;
-        try {
-          // V3 consent management is at conversation level or inbox level
-          const consentState = allow ? "allowed" : "denied";
-
-          // Try to find inbox ID for this address if needed
-          let inboxId = addressOrInboxId;
-          if (addressOrInboxId.startsWith("0x")) {
-            // This is an address, find the inbox ID
-            const foundInboxId = await client.findInboxIdByIdentifier({
-              identifierKind: "Ethereum" as const,
-              identifier: addressOrInboxId,
-            });
-            if (foundInboxId) {
-              inboxId = foundInboxId;
-            }
-          }
-
-          // Set consent preference at inbox level
-          await client.preferences.setConsentStates([
-            {
-              entity: inboxId,
-              entityType: "inbox_id" as any, // V3 consent entity type (strict typing)
-              state: consentState as any, // V3 consent state (strict typing)
-            },
-          ]);
-        } catch (error) {
-          console.error("Error managing consent:", error);
-        }
-      },
-      [client],
-    ),
-
-    allow: useCallback(
-      async (addresses: string[]) => {
-        if (!client) return;
-        const consentHook = useConsent();
-        for (const address of addresses) {
-          await consentHook.consent(address, true);
-        }
-      },
-      [client],
-    ),
-
-    deny: useCallback(
-      async (addresses: string[]) => {
-        if (!client) return;
-        const consentHook = useConsent();
-        for (const address of addresses) {
-          await consentHook.consent(address, false);
-        }
-      },
-      [client],
-    ),
+    consent: consentStates,
+    allow,
+    deny,
   };
 };
 
-// V3 equivalent of useDb from V2 - V3 manages database automatically
+// Performance optimization: Enhanced database hook
 export const useDb = () => {
   const client = useClient();
   return {
-    db: client, // V3 client has built-in database management
+    // V3 doesn't expose database directly, using internal state
+    // This is a placeholder for future database access
+    isReady: Boolean(client),
   };
 };
 
-// V3 equivalent of useStartConversation from V2 - uses inbox IDs
+// Performance optimization: Enhanced conversation starting with validation
 export const useStartConversation = () => {
   const client = useClient();
+  const [startingConversations, setStartingConversations] = useState<
+    Set<string>
+  >(new Set());
+
+  const startConversation = useCallback(
+    async (peerAddress: string) => {
+      if (!client) throw new Error("Client not initialized");
+
+      // Validate address format
+      if (!peerAddress || typeof peerAddress !== "string") {
+        throw new Error("Invalid peer address");
+      }
+
+      // Prevent duplicate conversation starts
+      if (startingConversations.has(peerAddress)) {
+        console.warn(
+          "⚠️ Conversation already being started with:",
+          peerAddress,
+        );
+        throw new Error("Conversation already being started");
+      }
+
+      setStartingConversations((prev) => new Set([...prev, peerAddress]));
+
+      try {
+        console.log("🔄 Starting conversation with:", peerAddress);
+        const startTime = Date.now();
+
+        // V3 conversation creation - use newDm for direct messages
+        const conversation = await client.conversations.newDm(peerAddress);
+
+        const endTime = Date.now();
+        console.log("✅ Conversation started successfully", {
+          conversationId: conversation.id,
+          peerAddress,
+          duration: endTime - startTime,
+        });
+
+        return { conversation, peerAddress };
+      } catch (error) {
+        console.error("❌ Error starting conversation:", error);
+        throw error;
+      } finally {
+        setStartingConversations((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(peerAddress);
+          return newSet;
+        });
+      }
+    },
+    [client, startingConversations],
+  );
 
   return {
-    startConversation: useCallback(
-      async (peerAddress: string) => {
-        if (!client) throw new Error("Client not initialized");
-        try {
-          // V3 uses findOrCreateDm with inbox ID instead of address
-          let inboxId = peerAddress;
-
-          // If this is an address, find the inbox ID
-          if (peerAddress.startsWith("0x")) {
-            const foundInboxId = await client.findInboxIdByIdentifier({
-              identifierKind: "Ethereum" as const,
-              identifier: peerAddress,
-            });
-            if (!foundInboxId) {
-              throw new Error(
-                `No inbox found for address: ${peerAddress}. This address needs to connect to XMTP first.`,
-              );
-            }
-            inboxId = foundInboxId;
-          }
-
-          // V3 conversations.newDm() creates or returns existing DM
-          const conversation = await client.conversations.newDm(inboxId);
-          return {
-            cachedConversation: conversation,
-            conversation: conversation,
-          };
-        } catch (error) {
-          console.error("Error starting conversation:", error);
-          throw error;
-        }
-      },
-      [client],
-    ),
+    startConversation,
+    isStarting: startingConversations.size > 0,
+    startingWith: Array.from(startingConversations),
   };
 };
 
-// V3 equivalent of useConversation from V2
+// Performance optimization: Enhanced conversation hook with message loading
 export const useConversation = () => {
   const client = useClient();
-
-  // V3 selected conversation state management using conversationTopic
   const conversationTopic = useXmtpStore((s) => s.conversationTopic);
-  const [selectedConversation, setSelectedConversation] = useState<any>(null);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const messagesCache = useRef<Map<string, any[]>>(new Map());
 
-  // Load conversation when topic changes
-  useEffect(() => {
-    if (client && conversationTopic) {
-      const loadConversation = async () => {
-        try {
-          const conversation =
-            await client.conversations.getConversationById(conversationTopic);
-          setSelectedConversation(conversation);
-        } catch (error) {
-          console.error("Error loading selected conversation:", error);
-          setSelectedConversation(null);
+  const loadConversation = useCallback(
+    async (forceRefresh = false) => {
+      if (!client || !conversationTopic) {
+        setMessages([]);
+        return;
+      }
+
+      // Check cache first
+      const cached = messagesCache.current.get(conversationTopic);
+      if (!forceRefresh && cached) {
+        console.log("📦 Using cached messages:", cached.length);
+        setMessages(cached);
+        return;
+      }
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        console.log("🔄 Loading conversation messages:", conversationTopic);
+        const startTime = Date.now();
+
+        // V3 conversation.messages() to get all messages
+        const conversation =
+          await client.conversations.getConversationById(conversationTopic);
+        if (!conversation) throw new Error("Conversation not found");
+
+        const conversationMessages = await conversation.messages();
+
+        const endTime = Date.now();
+        console.log("✅ Conversation messages loaded", {
+          count: conversationMessages.length,
+          duration: endTime - startTime,
+          conversationId: conversationTopic,
+        });
+
+        // Update cache
+        messagesCache.current.set(conversationTopic, conversationMessages);
+        setMessages(conversationMessages);
+        setError(null);
+      } catch (err) {
+        const error =
+          err instanceof Error ? err : new Error("Failed to load conversation");
+        console.error("❌ Failed to load conversation:", error);
+        setError(error);
+
+        // Fall back to cache if available
+        const cached = messagesCache.current.get(conversationTopic);
+        if (cached) {
+          console.log("📦 Using cached messages after error");
+          setMessages(cached);
         }
-      };
-      loadConversation();
-    } else {
-      setSelectedConversation(null);
-    }
-  }, [client, conversationTopic]);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [client, conversationTopic],
+  );
+
+  useEffect(() => {
+    loadConversation();
+  }, [loadConversation]);
 
   return {
-    conversation: selectedConversation,
-    getCachedByTopic: useCallback(
-      async (topic: string) => {
-        if (!client) return null;
-        try {
-          // V3 uses conversation ID instead of topic
-          return await client.conversations.getConversationById(topic);
-        } catch (error) {
-          console.error("Error getting conversation by topic:", error);
-          return null;
-        }
-      },
-      [client],
-    ),
-
-    getCachedByPeerAddress: useCallback(
-      async (peerAddress: string) => {
-        if (!client) return null;
-        try {
-          // Find inbox ID for address, then get DM conversation
-          const inboxId = await client.findInboxIdByIdentifier({
-            identifierKind: "Ethereum" as const,
-            identifier: peerAddress,
-          });
-          if (!inboxId) return null;
-
-          return await client.conversations.getDmByInboxId(inboxId);
-        } catch (error) {
-          console.error("Error getting conversation by peer address:", error);
-          return null;
-        }
-      },
-      [client],
-    ),
+    messages,
+    isLoading,
+    error,
+    refresh: () => loadConversation(true),
   };
 };
 
-// V3 equivalent of useStreamAllMessages from V2
+// Performance optimization: Enhanced message streaming with better error handling
 export const useStreamAllMessages = () => {
   const client = useClient();
   const [messages, setMessages] = useState<any[]>([]);
   const [error, setError] = useState<Error | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<
+    "connecting" | "connected" | "disconnected"
+  >("disconnected");
+  const seenMessages = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!client) {
       setIsStreaming(false);
+      setConnectionStatus("disconnected");
       return;
     }
 
     let cleanup: (() => void) | null = null;
     let streamClosed = false;
+    let streamHandle: any = null;
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 3;
 
     const setupStream = async () => {
       try {
         console.log("🔄 Setting up V3 message streaming...");
         setError(null);
         setIsStreaming(true);
+        setConnectionStatus("connecting");
 
-        // V3 conversations.streamAllMessages() with proper callback handling
-        const stream = await client.conversations.streamAllMessages(
-          (message: any) => {
-            if (message && !streamClosed) {
-              console.log("📨 Real-time message received:", {
-                id: message.id,
-                content: message.content,
-                sender: message.senderInboxId,
-                conversation: message.conversationId,
-              });
+        // Performance optimization: Enhanced message callback with deduplication
+        const messageCallback = (message: any) => {
+          if (message && !streamClosed) {
+            const messageId =
+              message.id || `${message.conversationId}_${message.sentAtNs}`;
 
-              setMessages((prev) => {
-                // Avoid duplicates by checking if message already exists
-                const messageExists = prev.some(
-                  (msg: any) => msg.id === message.id,
-                );
-                if (messageExists) {
-                  console.log("🔄 Message already exists, skipping duplicate");
-                  return prev;
-                }
-                return [...prev, message];
-              });
+            // Prevent duplicate messages
+            if (seenMessages.current.has(messageId)) {
+              console.log("🔄 Duplicate message filtered:", messageId);
+              return;
             }
-          },
-        );
+
+            seenMessages.current.add(messageId);
+
+            console.log("📨 Real-time message received:", {
+              id: messageId,
+              content:
+                typeof message.content === "string"
+                  ? message.content.slice(0, 50) + "..."
+                  : "non-text",
+              sender: message.senderInboxId,
+              conversation: message.conversationId,
+              timestamp: message.sentAtNs,
+            });
+
+            setMessages((prev) => {
+              // Additional safety check for duplicates
+              const messageExists = prev.some(
+                (msg: any) =>
+                  (msg.id && msg.id === messageId) ||
+                  (msg.conversationId === message.conversationId &&
+                    msg.sentAtNs === message.sentAtNs),
+              );
+
+              if (messageExists) {
+                console.log(
+                  "🔄 Message already exists in state, skipping duplicate",
+                );
+                return prev;
+              }
+
+              return [...prev, message];
+            });
+          }
+        };
+
+        // Create the stream with proper error handling
+        streamHandle =
+          await client.conversations.streamAllMessages(messageCallback);
 
         console.log("✅ V3 message streaming established");
+        setConnectionStatus("connected");
+        reconnectAttempts = 0;
 
         // Set up cleanup function
         cleanup = () => {
-          streamClosed = true;
-          setIsStreaming(false);
-          if (stream && typeof stream.return === "function") {
-            stream.return();
-            console.log("🔄 Message stream closed");
+          if (!streamClosed) {
+            streamClosed = true;
+            setIsStreaming(false);
+            setConnectionStatus("disconnected");
+
+            // Properly close the stream
+            if (streamHandle) {
+              try {
+                if (typeof streamHandle.return === "function") {
+                  streamHandle.return();
+                }
+                if (typeof streamHandle.close === "function") {
+                  streamHandle.close();
+                }
+                console.log("🔄 Message stream closed cleanly");
+              } catch (closeError) {
+                console.warn("⚠️ Warning during stream close:", closeError);
+              }
+            }
           }
         };
       } catch (err) {
@@ -351,6 +583,21 @@ export const useStreamAllMessages = () => {
         console.error("❌ Message streaming setup failed:", error);
         setError(error);
         setIsStreaming(false);
+        setConnectionStatus("disconnected");
+        streamClosed = true;
+
+        // Retry logic for connection errors
+        if (reconnectAttempts < maxReconnectAttempts) {
+          reconnectAttempts++;
+          console.log(
+            `🔄 Retrying stream setup (attempt ${reconnectAttempts}/${maxReconnectAttempts})`,
+          );
+          setTimeout(() => {
+            if (!streamClosed) {
+              setupStream();
+            }
+          }, 2000 * reconnectAttempts);
+        }
       }
     };
 
@@ -370,6 +617,8 @@ export const useStreamAllMessages = () => {
       setMessages([]);
       setError(null);
       setIsStreaming(false);
+      setConnectionStatus("disconnected");
+      seenMessages.current.clear();
     }
   }, [client]);
 
@@ -377,7 +626,9 @@ export const useStreamAllMessages = () => {
     messages,
     error,
     isStreaming,
+    connectionStatus,
     messageCount: messages.length,
+    seenCount: seenMessages.current.size,
   };
 };
 

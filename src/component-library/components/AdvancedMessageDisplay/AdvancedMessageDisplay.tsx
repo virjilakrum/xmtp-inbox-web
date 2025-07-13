@@ -50,6 +50,11 @@ import {
   StarIcon as StarSolidIcon,
   FaceSmileIcon as SmileSolidIcon,
 } from "@heroicons/react/24/solid";
+import {
+  safeFormatTimestamp,
+  safeFormatDate,
+  safeConvertTimestamp,
+} from "../../../helpers";
 
 // Emoji picker component
 const EmojiPicker: React.FC<{
@@ -666,8 +671,7 @@ const MessageItem: React.FC<{
   const { downloadAttachment } = useFileManagement();
 
   const formatTimestamp = (timestamp: bigint) => {
-    const date = new Date(Number(timestamp) / 1000000);
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return safeFormatTimestamp(timestamp);
   };
 
   const handleEmojiClick = (e: React.MouseEvent) => {
@@ -1001,9 +1005,7 @@ export const AdvancedMessageDisplay: React.FC<{
     let currentGroup: CachedMessageWithId[] = [];
 
     messages.forEach((message) => {
-      const messageDate = new Date(
-        Number(message.sentAtNs) / 1000000,
-      ).toDateString();
+      const messageDate = safeConvertTimestamp(message.sentAtNs).toDateString();
       if (messageDate !== currentDate) {
         if (currentGroup.length > 0) {
           groups.push({ date: currentDate, messages: currentGroup });
@@ -1029,12 +1031,7 @@ export const AdvancedMessageDisplay: React.FC<{
           {/* Date divider */}
           <div className="flex items-center justify-center py-4">
             <div className="bg-gray-100 px-3 py-1 rounded-full text-xs text-gray-600">
-              {new Date(date).toLocaleDateString([], {
-                weekday: "long",
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
+              {safeFormatDate(groupMessages[0]?.sentAtNs)}
             </div>
           </div>
 

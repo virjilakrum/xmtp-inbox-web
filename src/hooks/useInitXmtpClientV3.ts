@@ -122,16 +122,37 @@ const useInitXmtpClientV3 = () => {
       await initialize(walletClient);
       console.log("useInitXmtpClientV3 - V3 client initialized successfully");
 
-      // Set up profile information
-      const name = await throttledFetchAddressName(address as ETHAddress);
-      if (name) {
-        const avatar = await throttledFetchEnsAvatar(getWagmiConfig(), {
-          name,
-        });
-        if (avatar) {
-          setClientAvatar(avatar);
+      // Set up profile information with timeout handling
+      try {
+        const name = await Promise.race([
+          throttledFetchAddressName(address as ETHAddress),
+          new Promise<string | null>((_, reject) =>
+            setTimeout(() => reject(new Error("ENS resolution timeout")), 5000),
+          ),
+        ]);
+
+        if (name) {
+          try {
+            const avatar = await Promise.race([
+              throttledFetchEnsAvatar(getWagmiConfig(), { name }),
+              new Promise<string | null>((_, reject) =>
+                setTimeout(() => reject(new Error("ENS avatar timeout")), 3000),
+              ),
+            ]);
+
+            if (avatar) {
+              setClientAvatar(avatar);
+            }
+          } catch (avatarError) {
+            console.warn("ENS avatar fetch failed:", avatarError);
+            // Continue without avatar
+          }
+
+          setClientName(name);
         }
-        setClientName(name);
+      } catch (ensError) {
+        console.warn("ENS name resolution failed:", ensError);
+        // Continue without ENS name
       }
 
       setStatus("enabled");
