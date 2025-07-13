@@ -4,7 +4,7 @@ import { useClient } from "../hooks/useV3Hooks";
 import { useXmtpV3Context } from "../context/XmtpV3Provider";
 import { useXmtpStore } from "../store/xmtp";
 import { OnboardingPage } from "../component-library/pages/OnboardingPage/OnboardingPage";
-import ErrorBoundary from "../component-library/components/ErrorBoundary/ErrorBoundary";
+
 import InboxPage from "./inbox";
 
 const Index = () => {
@@ -122,15 +122,29 @@ const Index = () => {
     }
   };
 
-  // Show error boundary for installation limit errors
+  // Show error for installation limit errors
   if (error && isInstallationLimitError) {
     return (
-      <ErrorBoundary
-        error={error}
-        onRetry={handleRetry}
-        onClearData={handleClearData}
-        className="p-6 max-w-2xl mx-auto mt-8"
-      />
+      <div className="p-6 max-w-2xl mx-auto mt-8">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <h3 className="text-red-800 font-semibold mb-2">
+            Installation Limit Reached
+          </h3>
+          <p className="text-red-700 mb-4">{error.message}</p>
+          <div className="flex space-x-2">
+            <button
+              onClick={handleRetry}
+              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">
+              Retry
+            </button>
+            <button
+              onClick={handleClearData}
+              className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700">
+              Clear Data
+            </button>
+          </div>
+        </div>
+      </div>
     );
   }
 

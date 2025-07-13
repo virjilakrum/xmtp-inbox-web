@@ -1,206 +1,427 @@
-import React from "react";
+import React, { Component, ErrorInfo, ReactNode } from "react";
+import { IconButton } from "../IconButton/IconButton";
 import { PillButton } from "../PillButton/PillButton";
-import { classNames } from "../../../helpers";
+import { classNames } from "../../../helpers/classNames";
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+  errorInfo: ErrorInfo | null;
+  retryCount: number;
+  isRecovering: boolean;
+  lastErrorTime: number;
+}
 
 interface ErrorBoundaryProps {
-  error: Error;
-  onRetry?: () => void;
-  onClearData?: () => void;
+  children: ReactNode;
+  fallback?: ReactNode;
+  onError?: (error: Error, errorInfo: ErrorInfo) => void;
+  maxRetries?: number;
+  resetOnPropsChange?: boolean;
+  isolateErrors?: boolean;
+  showErrorDetails?: boolean;
   className?: string;
 }
 
-const ErrorBoundary: React.FC<ErrorBoundaryProps> = ({
+interface ErrorDisplayProps {
+  error: Error;
+  errorInfo: ErrorInfo;
+  onRetry: () => void;
+  onReport: () => void;
+  onDismiss: () => void;
+  retryCount: number;
+  maxRetries: number;
+  showDetails: boolean;
+  isRecovering: boolean;
+}
+
+const ErrorDisplay: React.FC<ErrorDisplayProps> = ({
   error,
+  errorInfo,
   onRetry,
-  onClearData,
-  className = "",
+  onReport,
+  onDismiss,
+  retryCount,
+  maxRetries,
+  showDetails,
+  isRecovering,
 }) => {
-  const isInstallationLimitError = error.name === "InstallationLimitError";
-  const isConnectionError =
-    error.message.includes("network") ||
-    error.message.includes("connection") ||
-    error.message.includes("timeout");
+  const [showFullDetails, setShowFullDetails] = React.useState(false);
 
-  const containerStyles: React.CSSProperties = {
-    backgroundColor: "#f9fafb",
-    border: "1px solid #e5e7eb",
-    borderRadius: "12px",
-    padding: "24px",
-    margin: "16px",
-    maxWidth: "600px",
-    marginLeft: "auto",
-    marginRight: "auto",
+  const getErrorType = (error: Error): string => {
+    if (error.name === "ChunkLoadError") return "Network Error";
+    if (error.message.includes("Loading chunk")) return "Loading Error";
+    if (error.message.includes("TypeError")) return "Type Error";
+    if (error.message.includes("ReferenceError")) return "Reference Error";
+    if (error.message.includes("NetworkError")) return "Network Error";
+    if (error.message.includes("XMTP")) return "XMTP Error";
+    return "Application Error";
   };
 
-  const contentStyles: React.CSSProperties = {
-    textAlign: "center",
-    color: "#374151",
+  const getErrorSeverity = (error: Error): "low" | "medium" | "high" => {
+    if (error.name === "ChunkLoadError") return "medium";
+    if (error.message.includes("Loading chunk")) return "medium";
+    if (error.message.includes("NetworkError")) return "high";
+    if (error.message.includes("XMTP")) return "high";
+    return "medium";
   };
 
-  const iconStyles: React.CSSProperties = {
-    fontSize: "48px",
-    marginBottom: "16px",
+  const getRecoveryMessage = (): string => {
+    const errorType = getErrorType(error);
+
+    switch (errorType) {
+      case "Network Error":
+        return "Please check your internet connection and try again.";
+      case "Loading Error":
+        return "There was an issue loading the application. Refreshing should fix this.";
+      case "XMTP Error":
+        return "There was an issue with the messaging service. Please try again.";
+      default:
+        return "An unexpected error occurred. Please try refreshing the page.";
+    }
   };
 
-  const titleStyles: React.CSSProperties = {
-    fontSize: "24px",
-    fontWeight: "bold",
-    marginBottom: "16px",
-    color: "#1f2937",
-  };
-
-  const messageStyles: React.CSSProperties = {
-    fontSize: "16px",
-    lineHeight: "1.5",
-    marginBottom: "20px",
-    color: "#6b7280",
-  };
-
-  const solutionsStyles: React.CSSProperties = {
-    textAlign: "left",
-    backgroundColor: "#f3f4f6",
-    padding: "16px",
-    borderRadius: "8px",
-    marginBottom: "20px",
-  };
-
-  const actionsStyles: React.CSSProperties = {
-    display: "flex",
-    gap: "12px",
-    justifyContent: "center",
-    flexWrap: "wrap",
-    marginBottom: "20px",
-  };
-
-  const detailsStyles: React.CSSProperties = {
-    textAlign: "left",
-    marginTop: "16px",
-  };
-
-  const preStyles: React.CSSProperties = {
-    backgroundColor: "#f3f4f6",
-    padding: "12px",
-    borderRadius: "6px",
-    fontSize: "12px",
-    overflow: "auto",
-    maxHeight: "150px",
-    fontFamily: "monospace",
-  };
+  const severity = getErrorSeverity(error);
+  const errorType = getErrorType(error);
 
   return (
     <div
-      className={classNames("error-boundary", className)}
-      style={containerStyles}>
-      <div className="error-boundary-content" style={contentStyles}>
-        <div className="error-icon" style={iconStyles}>
-          {isInstallationLimitError ? "⚠️" : isConnectionError ? "🔄" : "❌"}
-        </div>
-
-        <h3 className="error-title" style={titleStyles}>
-          {isInstallationLimitError
-            ? "Installation Limit Reached"
-            : isConnectionError
-              ? "Connection Error"
-              : "Something went wrong"}
-        </h3>
-
-        {isInstallationLimitError ? (
-          <div className="installation-limit-error">
-            <p className="error-message" style={messageStyles}>
-              This wallet address has reached the maximum number of zkλ
-              installations (5/5).
-            </p>
-
-            <div className="error-solutions" style={solutionsStyles}>
-              <h4 style={{ marginBottom: "12px", color: "#1f2937" }}>
-                Solutions:
-              </h4>
-              <ul style={{ paddingLeft: "20px", lineHeight: "1.6" }}>
-                <li style={{ marginBottom: "8px" }}>
-                  <strong>Clear local data:</strong> This will clear your local
-                  zkλ data and may allow you to reconnect
-                </li>
-                <li style={{ marginBottom: "8px" }}>
-                  <strong>Use a different wallet:</strong> Switch to a different
-                  wallet address for testing
-                </li>
-                <li style={{ marginBottom: "8px" }}>
-                  <strong>Contact support:</strong> If you need help revoking
-                  old installations
-                </li>
-              </ul>
-            </div>
-
-            <div className="error-actions" style={actionsStyles}>
-              {onClearData && (
-                <PillButton
-                  label="Clear Local Data"
-                  variant="primary"
-                  onClick={onClearData}
-                  size="large"
-                />
-              )}
-              {onRetry && (
-                <PillButton
-                  label="Try Again"
-                  variant="secondary"
-                  onClick={onRetry}
-                  size="large"
-                />
-              )}
-            </div>
-
-            <div className="error-details" style={detailsStyles}>
-              <details>
-                <summary style={{ cursor: "pointer", marginBottom: "8px" }}>
-                  Technical Details
-                </summary>
-                <pre className="error-stack" style={preStyles}>
-                  {error.message}
-                </pre>
-              </details>
-            </div>
-          </div>
-        ) : (
-          <div className="general-error">
-            <p className="error-message" style={messageStyles}>
-              {error.message || "An unexpected error occurred"}
-            </p>
-
-            <div className="error-actions" style={actionsStyles}>
-              {onRetry && (
-                <PillButton
-                  label={isConnectionError ? "Retry Connection" : "Try Again"}
-                  variant="primary"
-                  onClick={onRetry}
-                  size="large"
-                />
-              )}
-              {onClearData && (
-                <PillButton
-                  label="Clear Data"
-                  variant="secondary"
-                  onClick={onClearData}
-                  size="large"
-                />
-              )}
-            </div>
-
-            <div className="error-details" style={detailsStyles}>
-              <details>
-                <summary style={{ cursor: "pointer", marginBottom: "8px" }}>
-                  Technical Details
-                </summary>
-                <pre className="error-stack" style={preStyles}>
-                  {error.stack}
-                </pre>
-              </details>
-            </div>
-          </div>
-        )}
+      className={classNames(
+        "flex flex-col items-center justify-center min-h-[200px] p-6 rounded-lg border-2",
+        severity === "high"
+          ? "border-red-200 bg-red-50"
+          : severity === "medium"
+            ? "border-yellow-200 bg-yellow-50"
+            : "border-gray-200 bg-gray-50",
+      )}>
+      {/* Error Icon */}
+      <div
+        className={classNames(
+          "w-16 h-16 rounded-full flex items-center justify-center mb-4",
+          severity === "high"
+            ? "bg-red-100"
+            : severity === "medium"
+              ? "bg-yellow-100"
+              : "bg-gray-100",
+        )}>
+        <svg
+          className={classNames(
+            "w-8 h-8",
+            severity === "high"
+              ? "text-red-600"
+              : severity === "medium"
+                ? "text-yellow-600"
+                : "text-gray-600",
+          )}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+          />
+        </svg>
       </div>
+
+      {/* Error Title */}
+      <h3 className="text-lg font-semibold text-gray-900 mb-2">{errorType}</h3>
+
+      {/* Error Message */}
+      <p className="text-sm text-gray-600 text-center mb-4 max-w-md">
+        {getRecoveryMessage()}
+      </p>
+
+      {/* Retry Information */}
+      {maxRetries > 0 && (
+        <p className="text-xs text-gray-500 mb-4">
+          Retry attempts: {retryCount}/{maxRetries}
+        </p>
+      )}
+
+      {/* Action Buttons */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        {retryCount < maxRetries && (
+          <PillButton
+            label={isRecovering ? "Retrying..." : "Retry"}
+            onClick={onRetry}
+            variant="primary"
+            isDisabled={isRecovering}
+            size="small"
+          />
+        )}
+
+        <PillButton
+          label="Refresh"
+          onClick={() => window.location.reload()}
+          variant="secondary"
+          size="small"
+        />
+
+        <PillButton
+          label="Report"
+          onClick={onReport}
+          variant="secondary"
+          size="small"
+        />
+
+        <PillButton
+          label="Dismiss"
+          onClick={onDismiss}
+          variant="secondary"
+          size="small"
+        />
+      </div>
+
+      {/* Error Details Toggle */}
+      {showDetails && (
+        <div className="w-full max-w-md">
+          <button
+            onClick={() => setShowFullDetails(!showFullDetails)}
+            className="text-xs text-gray-500 hover:text-gray-700 mb-2">
+            {showFullDetails ? "Hide" : "Show"} technical details
+          </button>
+
+          {showFullDetails && (
+            <div className="bg-gray-100 rounded p-3 text-xs font-mono text-gray-700 max-h-40 overflow-y-auto">
+              <div className="mb-2">
+                <strong>Error:</strong> {error.message}
+              </div>
+              <div className="mb-2">
+                <strong>Stack:</strong>
+                <pre className="whitespace-pre-wrap">{error.stack}</pre>
+              </div>
+              <div>
+                <strong>Component Stack:</strong>
+                <pre className="whitespace-pre-wrap">
+                  {errorInfo.componentStack}
+                </pre>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
 
-export default ErrorBoundary;
+export class ErrorBoundary extends Component<
+  ErrorBoundaryProps,
+  ErrorBoundaryState
+> {
+  private retryTimeoutId: NodeJS.Timeout | null = null;
+  private errorReportingUrl: string | null = null;
+
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+
+    this.state = {
+      hasError: false,
+      error: null,
+      errorInfo: null,
+      retryCount: 0,
+      isRecovering: false,
+      lastErrorTime: 0,
+    };
+
+    // Setup error reporting endpoint
+    this.errorReportingUrl =
+      (import.meta.env as any).VITE_ERROR_REPORTING_URL || null;
+  }
+
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
+    return {
+      hasError: true,
+      error,
+      lastErrorTime: Date.now(),
+    };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    this.setState({
+      error,
+      errorInfo,
+    });
+
+    // Call onError callback if provided
+    if (this.props.onError) {
+      this.props.onError(error, errorInfo);
+    }
+
+    // Log error to console in development
+    if ((import.meta.env as any).MODE === "development") {
+      console.error("ErrorBoundary caught an error:", error);
+      console.error("Error Info:", errorInfo);
+    }
+
+    // Auto-report critical errors
+    if (this.shouldAutoReport(error)) {
+      this.reportError(error, errorInfo);
+    }
+  }
+
+  componentDidUpdate(prevProps: ErrorBoundaryProps) {
+    const { resetOnPropsChange } = this.props;
+    const { hasError } = this.state;
+
+    // Reset error state when props change (if enabled)
+    if (
+      resetOnPropsChange &&
+      hasError &&
+      prevProps.children !== this.props.children
+    ) {
+      this.setState({
+        hasError: false,
+        error: null,
+        errorInfo: null,
+        retryCount: 0,
+        isRecovering: false,
+      });
+    }
+  }
+
+  componentWillUnmount() {
+    if (this.retryTimeoutId) {
+      clearTimeout(this.retryTimeoutId);
+    }
+  }
+
+  private shouldAutoReport = (error: Error): boolean => {
+    // Auto-report network errors and critical application errors
+    return (
+      error.name === "ChunkLoadError" ||
+      error.message.includes("Loading chunk") ||
+      error.message.includes("NetworkError") ||
+      error.message.includes("XMTP")
+    );
+  };
+
+  private reportError = async (error: Error, errorInfo: ErrorInfo) => {
+    if (!this.errorReportingUrl) return;
+
+    try {
+      const errorReport = {
+        message: error.message,
+        stack: error.stack,
+        componentStack: errorInfo.componentStack,
+        timestamp: new Date().toISOString(),
+        userAgent: navigator.userAgent,
+        url: window.location.href,
+        userId: "anonymous", // Replace with actual user ID if available
+      };
+
+      await fetch(this.errorReportingUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(errorReport),
+      });
+    } catch (reportingError) {
+      console.error("Failed to report error:", reportingError);
+    }
+  };
+
+  private handleRetry = () => {
+    const { maxRetries = 3 } = this.props;
+    const { retryCount } = this.state;
+
+    if (retryCount >= maxRetries) return;
+
+    this.setState({
+      isRecovering: true,
+      retryCount: retryCount + 1,
+    });
+
+    // Simulate recovery attempt with timeout
+    this.retryTimeoutId = setTimeout(() => {
+      this.setState({
+        hasError: false,
+        error: null,
+        errorInfo: null,
+        isRecovering: false,
+      });
+    }, 1000);
+  };
+
+  private handleReport = () => {
+    const { error, errorInfo } = this.state;
+    if (error && errorInfo) {
+      this.reportError(error, errorInfo);
+    }
+  };
+
+  private handleDismiss = () => {
+    this.setState({
+      hasError: false,
+      error: null,
+      errorInfo: null,
+      retryCount: 0,
+      isRecovering: false,
+    });
+  };
+
+  render() {
+    const {
+      children,
+      fallback,
+      maxRetries = 3,
+      showErrorDetails = (import.meta.env as any).MODE === "development",
+      className = "",
+    } = this.props;
+
+    const { hasError, error, errorInfo, retryCount, isRecovering } = this.state;
+
+    if (hasError && error && errorInfo) {
+      // Use custom fallback if provided
+      if (fallback) {
+        return fallback;
+      }
+
+      // Default error UI
+      return (
+        <div className={classNames("error-boundary", className)}>
+          <ErrorDisplay
+            error={error}
+            errorInfo={errorInfo}
+            onRetry={this.handleRetry}
+            onReport={this.handleReport}
+            onDismiss={this.handleDismiss}
+            retryCount={retryCount}
+            maxRetries={maxRetries}
+            showDetails={showErrorDetails}
+            isRecovering={isRecovering}
+          />
+        </div>
+      );
+    }
+
+    return children;
+  }
+}
+
+// Higher-order component for easy error boundary wrapping
+export const withErrorBoundary = <P extends object>(
+  Component: React.ComponentType<P>,
+  errorBoundaryProps?: Partial<ErrorBoundaryProps>,
+) => {
+  const WrappedComponent = (props: P) => (
+    <ErrorBoundary {...errorBoundaryProps}>
+      <Component {...props} />
+    </ErrorBoundary>
+  );
+
+  WrappedComponent.displayName = `withErrorBoundary(${Component.displayName || Component.name})`;
+  return WrappedComponent;
+};
+
+// Hook for error reporting from functional components
+export const useErrorHandler = () => {
+  const reportError = React.useCallback((error: Error, errorInfo?: any) => {
+    // Trigger error boundary by throwing the error
+    throw error;
+  }, []);
+
+  return { reportError };
+};
