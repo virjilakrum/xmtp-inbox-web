@@ -2,6 +2,7 @@ import { useXmtpV3Context } from "../context/XmtpV3Provider";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import useXmtpV3Client from "./useXmtpV3Client";
 import { useXmtpStore } from "../store/xmtp";
+import { safeConvertTimestamp } from "../helpers";
 
 // Performance optimization: Memoized client hook
 export const useClient = () => {
@@ -80,7 +81,7 @@ export const useConversations = () => {
     [client, lastRefresh],
   );
 
-  // Performance optimization: Auto-refresh conversations on client change
+  // Performance optimization: Auto-refresh conversations on client change and stream new conversations
   useEffect(() => {
     if (client) {
       loadConversations();
@@ -88,6 +89,65 @@ export const useConversations = () => {
       setConversations([]);
       setError(null);
     }
+
+    if (!client) return;
+
+    let stream: any;
+    const startStream = async () => {
+      try {
+        stream = await client.conversations.stream((newConvo: any) => {
+          setConversations((prev) => {
+            // Check for duplicates
+            if (prev.some((c) => c.id === newConvo.id)) {
+              console.log("🔄 Duplicate conversation filtered:", newConvo.id);
+              return prev;
+            }
+            console.log(
+              "📨 New conversation received via stream:",
+              newConvo.id,
+            );
+
+            // **FIX**: Auto-select new conversation if no conversation is currently selected
+            const currentConversationTopic =
+              useXmtpStore.getState().conversationTopic;
+            if (!currentConversationTopic) {
+              console.log("🔄 Auto-selecting new conversation:", newConvo.id);
+              const store = useXmtpStore.getState();
+              store.setConversationTopic(newConvo.id);
+
+              // Update recipient info
+              if (newConvo.peerInboxId) {
+                store.setRecipientAddress(newConvo.peerInboxId);
+                store.setRecipientState("valid");
+                store.setRecipientOnNetwork(true);
+              }
+            }
+
+            return [...prev, newConvo];
+          });
+
+          // Update cache
+          const cacheKey = `conversations_${client.inboxId || "default"}`;
+          const currentCache = conversationsCache.current.get(cacheKey) || [];
+          if (!currentCache.some((c: any) => c.id === newConvo.id)) {
+            conversationsCache.current.set(cacheKey, [
+              ...currentCache,
+              newConvo,
+            ]);
+          }
+        });
+      } catch (err) {
+        console.error("❌ Error setting up conversation stream:", err);
+      }
+    };
+
+    startStream();
+
+    return () => {
+      if (stream) {
+        stream.return();
+      }
+    };
   }, [client, loadConversations]);
 
   // Performance optimization: Memoized return value

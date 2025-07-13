@@ -235,6 +235,20 @@ export const MessageInputController = memo(
       hasError: !!inboxNotFoundError,
       isSending,
       hasValidConversation,
+      // **FIX**: Add more detailed debugging info
+      conversationDetails: conversation
+        ? {
+            id: conversation.id,
+            peerAddress: conversation.peerAddress,
+            topic: conversation.topic,
+          }
+        : null,
+      storeState: {
+        conversationTopic,
+        recipientAddress,
+        recipientState: useXmtpStore.getState().recipientState,
+        recipientOnNetwork: useXmtpStore.getState().recipientOnNetwork,
+      },
     });
 
     return (

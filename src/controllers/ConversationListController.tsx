@@ -84,9 +84,47 @@ export const ConversationListController = memo(() => {
   const handleConversationClick = useCallback(
     (conversationId: string) => {
       console.log("🔄 Conversation selected:", conversationId);
+
+      // **FIX**: Update all necessary store state for proper conversation selection
+      const store = useXmtpStore.getState();
+
+      // Set the conversation topic for useConversation hook
       setConversationTopic(conversationId);
+
+      // **FIX**: Find the conversation and update recipient info
+      const selectedConversation = conversations.find(
+        (conv) => conv.id === conversationId,
+      );
+      if (selectedConversation) {
+        console.log("✅ Found conversation:", {
+          id: selectedConversation.id,
+          peerInboxId: selectedConversation.peerInboxId,
+          lastMessage: selectedConversation.lastMessage?.content?.slice(0, 50),
+        });
+
+        // Update recipient address for message input
+        if (selectedConversation.peerInboxId) {
+          store.setRecipientAddress(selectedConversation.peerInboxId);
+        }
+
+        // Clear any previous recipient input
+        store.setRecipientInput("");
+
+        // Set recipient state to ready
+        store.setRecipientState("valid");
+
+        // Set recipient as on network
+        store.setRecipientOnNetwork(true);
+
+        // Clear any previous errors
+        store.setAttachmentError(null);
+
+        console.log("✅ Store state updated for conversation:", conversationId);
+      } else {
+        console.warn("⚠️ Conversation not found in list:", conversationId);
+      }
     },
-    [setConversationTopic],
+    [setConversationTopic, conversations],
   );
 
   // Performance optimization: Memoized allow handler

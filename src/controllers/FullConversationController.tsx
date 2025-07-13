@@ -80,6 +80,11 @@ const useMessages = (
       }));
 
       setMessages(convertedMessages);
+
+      console.log("✅ Messages loaded for conversation:", {
+        conversationId: conversation.conversationId,
+        messageCount: convertedMessages.length,
+      });
     } catch (error) {
       console.error("Error loading V3 messages:", error);
       setMessages([]);
@@ -91,6 +96,35 @@ const useMessages = (
   useEffect(() => {
     loadMessages();
   }, [loadMessages]);
+
+  // **FIX**: Listen for new message events and reload if it's for this conversation
+  useEffect(() => {
+    const handleMessageReceived = (event: CustomEvent) => {
+      const { conversationId, isCurrentConversation } = event.detail;
+
+      if (
+        conversationId === conversation.conversationId &&
+        isCurrentConversation
+      ) {
+        console.log(
+          "🔄 Reloading messages for current conversation:",
+          conversationId,
+        );
+        loadMessages();
+      }
+    };
+
+    window.addEventListener(
+      "xmtp-message-received",
+      handleMessageReceived as EventListener,
+    );
+    return () => {
+      window.removeEventListener(
+        "xmtp-message-received",
+        handleMessageReceived as EventListener,
+      );
+    };
+  }, [conversation.conversationId, loadMessages]);
 
   return { messages, isLoading };
 };
@@ -106,7 +140,7 @@ export const FullConversationController: React.FC<
   const renderedDatesRef = useRef<Date[]>([]);
   const [effect, setEffect] = useState<EffectType | undefined>(undefined);
 
-  const { db } = useDb();
+  const { isReady } = useDb();
   const [messageId, setMessageId] = useState<string>("");
   const conversationTopic = useXmtpStore((s) => s.conversationTopic);
 
