@@ -24,7 +24,7 @@ export const MessageInputController = memo(
     setIsDragActive,
   }: MessageInputControllerProps) => {
     const { startConversation } = useStartConversation();
-    const { sendMessage, isSending, queuedCount } = useSendMessage();
+    const { sendMessage, sendingMessages, messageQueue } = useSendMessage();
     const recipientAddress = useXmtpStore((s) => s.recipientAddress);
     const conversationTopic = useXmtpStore((s) => s.conversationTopic);
     const { conversation } = useSelectedConversation();
@@ -46,6 +46,10 @@ export const MessageInputController = memo(
         }
       >
     >(new Map());
+
+    // **PERFORMANCE**: Computed sending state
+    const isSending = sendingMessages.length > 0 || isProcessing;
+    const queuedCount = messageQueue.length;
 
     // **PERFORMANCE**: Debounced validation
     const hasValidConversation = useMemo(() => {
@@ -97,7 +101,7 @@ export const MessageInputController = memo(
         // This would be handled by the parent component
 
         try {
-          console.log("🚀 Fast message send process:", {
+          console.log("🚀 Enhanced message send process:", {
             message: message.slice(0, 50) + "...",
             hasConversation: !!conversation,
             hasConversationTopic: !!conversationTopic,
@@ -115,7 +119,7 @@ export const MessageInputController = memo(
             recipientAddress
           ) {
             console.log(
-              "🚀 Fast conversation creation with:",
+              "🚀 Enhanced conversation creation with:",
               recipientAddress,
             );
 
@@ -129,12 +133,12 @@ export const MessageInputController = memo(
                 .getState()
                 .setConversationTopic(targetConversationId);
               console.log(
-                "✅ Fast conversation created:",
+                "✅ Enhanced conversation created:",
                 targetConversationId,
               );
             } catch (startConversationError) {
               console.error(
-                "❌ Fast conversation creation failed:",
+                "❌ Enhanced conversation creation failed:",
                 startConversationError,
               );
 
@@ -163,7 +167,7 @@ export const MessageInputController = memo(
           const conversationId = targetConversationId || targetConversation?.id;
 
           if (conversationId) {
-            console.log("🚀 Fast message send to:", conversationId);
+            console.log("🚀 Enhanced message send to:", conversationId);
 
             // **PERFORMANCE**: Send with optimistic ID for tracking
             const result = await sendMessage(
@@ -182,35 +186,27 @@ export const MessageInputController = memo(
                   newMap.set(optimisticId, {
                     ...msg,
                     id: String(result.id || optimisticId),
-                    status: result.pending ? "sending" : "sent",
+                    status: "sent",
                   });
                 }
                 return newMap;
               });
 
-              // **PERFORMANCE**: Auto-remove optimistic message after delay if sent
-              if (!result.pending) {
-                setTimeout(() => {
-                  setOptimisticMessages((prev) => {
-                    const newMap = new Map(prev);
-                    newMap.delete(optimisticId);
-                    return newMap;
-                  });
-                }, 3000); // Remove after 3 seconds to let real message appear
-              }
+              // **PERFORMANCE**: Auto-remove optimistic message after delay
+              setTimeout(() => {
+                setOptimisticMessages((prev) => {
+                  const newMap = new Map(prev);
+                  newMap.delete(optimisticId);
+                  return newMap;
+                });
+              }, 5000); // Remove after 5 seconds to let real message appear
             }
-
-            console.log("✅ Fast message send completed");
-
-            // **PERFORMANCE**: Clear attachment and state
-            clearAttachment();
-            clearError();
-            setLastSentMessage("");
           } else {
-            throw new Error("No conversation available to send message");
+            console.error("❌ No conversation ID available for sending");
+            throw new Error("No conversation available");
           }
         } catch (error) {
-          console.error("❌ Fast message send failed:", error);
+          console.error("❌ Enhanced message send failed:", error);
 
           // **PERFORMANCE**: Update optimistic message status to failed
           setOptimisticMessages((prev) => {
@@ -222,33 +218,25 @@ export const MessageInputController = memo(
             return newMap;
           });
 
-          // **PERFORMANCE**: Enhanced error handling
-          if (error instanceof Error) {
-            if (error.message.includes("No inbox found")) {
-              setInboxNotFoundError(recipientAddress || "Unknown address");
-            } else if (error.message.includes("timeout")) {
-              console.error(
-                "❌ Message send timeout - will retry automatically",
-              );
-            } else if (error.message.includes("network")) {
-              console.error("❌ Network error - will retry automatically");
-            } else {
-              console.error("❌ Message send failed:", error);
-            }
-          }
+          // **PERFORMANCE**: Auto-remove failed optimistic message after delay
+          setTimeout(() => {
+            setOptimisticMessages((prev) => {
+              const newMap = new Map(prev);
+              newMap.delete(optimisticId);
+              return newMap;
+            });
+          }, 10000); // Remove after 10 seconds
         } finally {
           setIsProcessing(false);
         }
       },
       [
-        isProcessing,
         conversation,
         conversationTopic,
         recipientAddress,
         startConversation,
         sendMessage,
-        clearError,
-        clearAttachment,
+        isProcessing,
       ],
     );
 

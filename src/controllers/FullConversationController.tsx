@@ -38,6 +38,17 @@ type V3Message = {
   senderAddress: string;
   sentAt: Date;
   effectType?: EffectType;
+  metadata?: {
+    id: string;
+    deliveryStatus: "sending" | "sent" | "delivered" | "read" | "failed";
+    isEdited: boolean;
+    reactions: Record<string, any>;
+    mentions: string[];
+    links: string[];
+    attachments: any[];
+    isEncrypted: boolean;
+    encryptionLevel: "transport" | "conversation" | "message";
+  };
 };
 
 // **PERFORMANCE**: Real V3 useMessages hook with fast updates and caching
@@ -221,6 +232,117 @@ const useMessages = (
       }
     };
 
+    const handleOptimisticMessageSent = (event: CustomEvent) => {
+      const { message, conversationId } = event.detail;
+
+      if (conversationId === conversation.conversationId) {
+        console.log("🚀 Optimistic message sent:", message.id);
+
+        setMessages((prev) => {
+          const newMessages = [...prev];
+          const existingIndex = newMessages.findIndex(
+            (m) => m.id === message.id,
+          );
+
+          if (existingIndex >= 0) {
+            newMessages[existingIndex] = message;
+          } else {
+            newMessages.push(message);
+          }
+
+          // Update cache
+          messagesCache.current.set(conversation.conversationId!, newMessages);
+          return newMessages.sort(
+            (a, b) => a.sentAt.getTime() - b.sentAt.getTime(),
+          );
+        });
+      }
+    };
+
+    const handleMessageSentSuccess = (event: CustomEvent) => {
+      const { messageId, conversationId, optimisticId } = event.detail;
+
+      if (conversationId === conversation.conversationId) {
+        console.log("✅ Message sent successfully:", messageId);
+
+        setMessages((prev) => {
+          const newMessages = prev.map((msg) => {
+            if (msg.id === optimisticId) {
+              return {
+                ...msg,
+                id: messageId,
+                metadata: {
+                  ...msg.metadata,
+                  id: messageId,
+                  deliveryStatus: "sent" as const,
+                },
+              } as V3Message;
+            }
+            return msg;
+          });
+
+          // Update cache
+          messagesCache.current.set(conversation.conversationId!, newMessages);
+          return newMessages;
+        });
+      }
+    };
+
+    const handleMessageSentError = (event: CustomEvent) => {
+      const { conversationId, optimisticId, error } = event.detail;
+
+      if (conversationId === conversation.conversationId) {
+        console.log("❌ Message sent error:", error);
+
+        setMessages((prev) => {
+          const newMessages = prev.map((msg) => {
+            if (msg.id === optimisticId) {
+              return {
+                ...msg,
+                metadata: {
+                  ...msg.metadata,
+                  id: msg.id,
+                  deliveryStatus: "failed" as const,
+                },
+              } as V3Message;
+            }
+            return msg;
+          });
+
+          // Update cache
+          messagesCache.current.set(conversation.conversationId!, newMessages);
+          return newMessages;
+        });
+      }
+    };
+
+    const handleConversationMessageUpdated = (event: CustomEvent) => {
+      const { message, conversationId } = event.detail;
+
+      if (conversationId === conversation.conversationId) {
+        console.log("🔄 Conversation message updated:", message.id);
+
+        setMessages((prev) => {
+          const newMessages = [...prev];
+          const existingIndex = newMessages.findIndex(
+            (m) => m.id === message.id,
+          );
+
+          if (existingIndex >= 0) {
+            newMessages[existingIndex] = message;
+          } else {
+            newMessages.push(message);
+          }
+
+          // Update cache
+          messagesCache.current.set(conversation.conversationId!, newMessages);
+          return newMessages.sort(
+            (a, b) => a.sentAt.getTime() - b.sentAt.getTime(),
+          );
+        });
+      }
+    };
+
     const handleRefreshConversation = (event: CustomEvent) => {
       const { conversationId } = event.detail;
 
@@ -235,6 +357,22 @@ const useMessages = (
       handleFastMessageReceived as EventListener,
     );
     window.addEventListener(
+      "xmtp-optimistic-message-sent",
+      handleOptimisticMessageSent as EventListener,
+    );
+    window.addEventListener(
+      "xmtp-message-sent-success",
+      handleMessageSentSuccess as EventListener,
+    );
+    window.addEventListener(
+      "xmtp-message-sent-error",
+      handleMessageSentError as EventListener,
+    );
+    window.addEventListener(
+      "xmtp-conversation-message-updated",
+      handleConversationMessageUpdated as EventListener,
+    );
+    window.addEventListener(
       "xmtp-conversation-refresh",
       handleRefreshConversation as EventListener,
     );
@@ -243,6 +381,22 @@ const useMessages = (
       window.removeEventListener(
         "xmtp-fast-message-received",
         handleFastMessageReceived as EventListener,
+      );
+      window.removeEventListener(
+        "xmtp-optimistic-message-sent",
+        handleOptimisticMessageSent as EventListener,
+      );
+      window.removeEventListener(
+        "xmtp-message-sent-success",
+        handleMessageSentSuccess as EventListener,
+      );
+      window.removeEventListener(
+        "xmtp-message-sent-error",
+        handleMessageSentError as EventListener,
+      );
+      window.removeEventListener(
+        "xmtp-conversation-message-updated",
+        handleConversationMessageUpdated as EventListener,
       );
       window.removeEventListener(
         "xmtp-conversation-refresh",

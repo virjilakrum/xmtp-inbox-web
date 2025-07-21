@@ -277,8 +277,47 @@ export const useSendMessage = () => {
 
       setSendingMessages((prev) => new Set([...prev, messageKey]));
 
+      // **PERFORMANCE**: Create optimistic message for instant UI update
+      const optimisticMessage = {
+        id: messageKey,
+        conversationId,
+        content,
+        senderAddress: client.inboxId || "unknown",
+        sentAtNs: BigInt(Date.now() * 1000000),
+        metadata: {
+          id: messageKey,
+          deliveryStatus: "sending" as const,
+          isEdited: false,
+          reactions: {},
+          mentions: [],
+          links: [],
+          attachments: [],
+          isEncrypted: false,
+          encryptionLevel: "transport" as const,
+        },
+        localMetadata: {
+          isSelected: false,
+          isHighlighted: false,
+          searchScore: 0,
+        },
+      };
+
+      // **PERFORMANCE**: Dispatch optimistic message event immediately
+      const optimisticEvent = new CustomEvent("xmtp-optimistic-message-sent", {
+        detail: {
+          message: optimisticMessage,
+          conversationId,
+          messageId: messageKey,
+          timestamp: Date.now(),
+        },
+      });
+      window.dispatchEvent(optimisticEvent);
+
       try {
-        console.log("🚀 Fast message send to conversation:", conversationId);
+        console.log(
+          "🚀 Enhanced message send to conversation:",
+          conversationId,
+        );
         const startTime = Date.now();
 
         // **PERFORMANCE**: Get conversation with caching
@@ -295,7 +334,7 @@ export const useSendMessage = () => {
         const messageId = await Promise.race([messagePromise, timeoutPromise]);
 
         const endTime = Date.now();
-        console.log("✅ Fast message sent successfully", {
+        console.log("✅ Enhanced message sent successfully", {
           messageId,
           conversationId,
           duration: endTime - startTime,
@@ -310,6 +349,17 @@ export const useSendMessage = () => {
           return newQueue;
         });
 
+        // **PERFORMANCE**: Dispatch success event
+        const successEvent = new CustomEvent("xmtp-message-sent-success", {
+          detail: {
+            messageId,
+            conversationId,
+            optimisticId: messageKey,
+            timestamp: Date.now(),
+          },
+        });
+        window.dispatchEvent(successEvent);
+
         return {
           id: messageId,
           conversationId,
@@ -318,6 +368,17 @@ export const useSendMessage = () => {
         };
       } catch (error) {
         console.error("❌ Error sending message:", error);
+
+        // **PERFORMANCE**: Dispatch error event
+        const errorEvent = new CustomEvent("xmtp-message-sent-error", {
+          detail: {
+            error: error instanceof Error ? error.message : "Unknown error",
+            conversationId,
+            optimisticId: messageKey,
+            timestamp: Date.now(),
+          },
+        });
+        window.dispatchEvent(errorEvent);
 
         // **PERFORMANCE**: Enhanced retry logic with exponential backoff
         if (retryCount < 3 && error instanceof Error) {
@@ -350,14 +411,6 @@ export const useSendMessage = () => {
             setTimeout(() => {
               sendMessage(conversationId, content, retryCount + 1, messageKey);
             }, backoffDelay);
-
-            return {
-              id: messageKey,
-              conversationId,
-              content,
-              optimisticId: messageKey,
-              pending: true,
-            };
           }
         }
 
@@ -370,45 +423,41 @@ export const useSendMessage = () => {
         });
       }
     },
-    [client, sendingMessages],
+    [client],
   );
 
-  // **PERFORMANCE**: Auto-retry failed messages from queue
+  // **PERFORMANCE**: Process message queue
   useEffect(() => {
-    const retryInterval = setInterval(() => {
-      messageQueue.forEach((queuedMessage, messageKey) => {
-        const { conversationId, content, retryCount, timestamp } =
-          queuedMessage;
+    const processQueue = () => {
+      setMessageQueue((prev) => {
+        const newQueue = new Map(prev);
+        let processed = false;
 
-        // Only retry if message is older than backoff delay and hasn't exceeded max retries
-        const now = Date.now();
-        const backoffDelay = Math.min(
-          1000 * Math.pow(2, retryCount - 1),
-          10000,
-        );
-
-        if (now - timestamp > backoffDelay && retryCount <= 3) {
-          console.log("🔄 Auto-retrying queued message:", messageKey);
-          sendMessage(conversationId, content, retryCount, messageKey);
-        } else if (retryCount > 3) {
-          // Remove from queue if max retries exceeded
-          setMessageQueue((prev) => {
-            const newQueue = new Map(prev);
-            newQueue.delete(messageKey);
-            return newQueue;
-          });
+        for (const [key, item] of newQueue.entries()) {
+          if (Date.now() - item.timestamp > 5000) {
+            // Retry after 5 seconds
+            sendMessage(
+              item.conversationId,
+              item.content,
+              item.retryCount,
+              key,
+            ).catch(console.error);
+            newQueue.delete(key);
+            processed = true;
+          }
         }
-      });
-    }, 2000);
 
-    return () => clearInterval(retryInterval);
-  }, [messageQueue, sendMessage]);
+        return processed ? newQueue : prev;
+      });
+    };
+
+    const interval = setInterval(processQueue, 5000);
+    return () => clearInterval(interval);
+  }, [sendMessage]);
 
   return {
     sendMessage,
-    isSending: sendingMessages.size > 0,
-    sendingCount: sendingMessages.size,
-    queuedCount: messageQueue.size,
+    sendingMessages: Array.from(sendingMessages),
     messageQueue: Array.from(messageQueue.entries()),
   };
 };
@@ -658,7 +707,7 @@ export const useStreamAllMessages = () => {
 
     const setupStream = async () => {
       try {
-        console.log("🚀 Setting up fast V3 message streaming...");
+        console.log("🚀 Setting up enhanced V3 message streaming...");
         setError(null);
         setIsStreaming(true);
         setConnectionStatus("connecting");
@@ -688,7 +737,7 @@ export const useStreamAllMessages = () => {
                 (streamMetrics.current.avgLatency + latency) / 2;
             }
 
-            console.log("🚀 Fast real-time message received:", {
+            console.log("🚀 Enhanced real-time message received:", {
               id: messageId,
               content:
                 typeof message.content === "string"
@@ -722,7 +771,7 @@ export const useStreamAllMessages = () => {
               return newMessages;
             });
 
-            // **PERFORMANCE**: Immediate UI update notification
+            // **PERFORMANCE**: Enhanced UI update notification with more details
             const event = new CustomEvent("xmtp-fast-message-received", {
               detail: {
                 message,
@@ -730,9 +779,26 @@ export const useStreamAllMessages = () => {
                 conversationId: message.conversationId,
                 timestamp: receiveTime,
                 metrics: { ...streamMetrics.current },
+                senderAddress: message.senderAddress,
+                content: message.content,
+                sentAtNs: message.sentAtNs,
               },
             });
             window.dispatchEvent(event);
+
+            // **PERFORMANCE**: Additional event for conversation-specific updates
+            const conversationEvent = new CustomEvent(
+              "xmtp-conversation-message-updated",
+              {
+                detail: {
+                  conversationId: message.conversationId,
+                  message,
+                  messageId,
+                  timestamp: receiveTime,
+                },
+              },
+            );
+            window.dispatchEvent(conversationEvent);
           }
         };
 
@@ -742,96 +808,57 @@ export const useStreamAllMessages = () => {
 
         setConnectionStatus("connected");
         reconnectAttempts = 0;
-        console.log("✅ Fast V3 message streaming established");
+        console.log("✅ Enhanced V3 message streaming established");
       } catch (error) {
-        console.error("❌ Fast message streaming error:", error);
+        console.error("❌ Enhanced message streaming error:", error);
         setError(
           error instanceof Error ? error : new Error("Streaming failed"),
         );
         setConnectionStatus("disconnected");
+        setIsStreaming(false);
 
-        // **PERFORMANCE**: Smart reconnection with exponential backoff
-        if (reconnectAttempts < maxReconnectAttempts && !streamClosed) {
+        // **PERFORMANCE**: Enhanced retry logic
+        if (reconnectAttempts < maxReconnectAttempts) {
           reconnectAttempts++;
-          const backoffDelay = Math.min(
-            1000 * Math.pow(2, reconnectAttempts - 1),
-            30000,
-          );
-
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000);
           console.log(
-            `🔄 Fast streaming reconnection attempt ${reconnectAttempts}/${maxReconnectAttempts} in ${backoffDelay}ms`,
+            `🔄 Enhanced streaming retry in ${delay}ms (attempt ${reconnectAttempts}/${maxReconnectAttempts})`,
           );
-          setConnectionStatus("reconnecting");
 
           reconnectTimer = setTimeout(() => {
             if (!streamClosed) {
               setupStream();
             }
-          }, backoffDelay);
-        } else {
-          console.error(
-            "❌ Max reconnection attempts reached for message streaming",
-          );
-          setIsStreaming(false);
+          }, delay);
         }
       }
     };
 
-    setupStream();
+    const startStream = async () => {
+      await setupStream();
+    };
 
-    cleanup = () => {
+    const cleanupStream = () => {
       streamClosed = true;
-      if (streamHandle) {
-        try {
-          streamHandle.return();
-        } catch (error) {
-          console.error("Error closing stream:", error);
-        }
-      }
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
+        reconnectTimer = null;
       }
-      setIsStreaming(false);
-      setConnectionStatus("disconnected");
+      if (streamHandle && typeof streamHandle.close === "function") {
+        try {
+          streamHandle.close();
+        } catch (error) {
+          console.warn("⚠️ Error closing stream:", error);
+        }
+      }
+      if (cleanup) {
+        cleanup();
+      }
     };
 
-    return cleanup;
-  }, [client]);
+    startStream();
 
-  // **PERFORMANCE**: Metrics reporting for debugging
-  useEffect(() => {
-    const metricsInterval = setInterval(() => {
-      if (isStreaming) {
-        console.log("📊 Fast streaming metrics:", {
-          messagesReceived: streamMetrics.current.messagesReceived,
-          avgLatency: Math.round(streamMetrics.current.avgLatency),
-          connectionAttempts: streamMetrics.current.connectionAttempts,
-          lastMessage: streamMetrics.current.lastMessageTime
-            ? `${Math.round((Date.now() - streamMetrics.current.lastMessageTime) / 1000)}s ago`
-            : "none",
-          status: connectionStatus,
-        });
-      }
-    }, 30000); // Report every 30 seconds
-
-    return () => clearInterval(metricsInterval);
-  }, [isStreaming, connectionStatus]);
-
-  // **PERFORMANCE**: Clear messages when client changes
-  useEffect(() => {
-    if (!client) {
-      setMessages([]);
-      setError(null);
-      setIsStreaming(false);
-      setConnectionStatus("disconnected");
-      seenMessages.current.clear();
-      streamMetrics.current = {
-        messagesReceived: 0,
-        lastMessageTime: 0,
-        connectionAttempts: 0,
-        avgLatency: 0,
-      };
-    }
+    return cleanupStream;
   }, [client]);
 
   return {
@@ -840,7 +867,6 @@ export const useStreamAllMessages = () => {
     isStreaming,
     connectionStatus,
     messageCount: messages.length,
-    seenCount: seenMessages.current.size,
     metrics: streamMetrics.current,
   };
 };
