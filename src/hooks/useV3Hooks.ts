@@ -332,10 +332,18 @@ export const useSendMessage = () => {
         });
         const startTime = Date.now();
 
-        // **PERFORMANCE**: Get conversation with caching
-        const conversation =
-          await client.conversations.getConversationById(conversationId);
-        if (!conversation) throw new Error("Conversation not found");
+        // **FIX**: Enhanced conversation retrieval with error handling
+        let conversation;
+        try {
+          conversation =
+            await client.conversations.getConversationById(conversationId);
+          if (!conversation) throw new Error("Conversation not found");
+        } catch (conversationError) {
+          console.error("❌ Error getting conversation:", conversationError);
+          throw new Error(
+            `Failed to get conversation: ${conversationError instanceof Error ? conversationError.message : "Unknown error"}`,
+          );
+        }
 
         // **FIX**: Enhanced conversation validation
         const peerAddress =
@@ -352,13 +360,22 @@ export const useSendMessage = () => {
               : false,
         });
 
-        // **PERFORMANCE**: Send with timeout to prevent hanging
-        const messagePromise = conversation.send(content);
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Message send timeout")), 15000),
-        );
+        // **FIX**: Enhanced message sending with proper error handling
+        let messageId;
+        try {
+          // **PERFORMANCE**: Send with timeout to prevent hanging
+          const messagePromise = conversation.send(content);
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("Message send timeout")), 15000),
+          );
 
-        const messageId = await Promise.race([messagePromise, timeoutPromise]);
+          messageId = await Promise.race([messagePromise, timeoutPromise]);
+        } catch (sendError) {
+          console.error("❌ Error sending message:", sendError);
+          throw new Error(
+            `Failed to send message: ${sendError instanceof Error ? sendError.message : "Unknown error"}`,
+          );
+        }
 
         const endTime = Date.now();
         console.log("✅ Enhanced message sent successfully", {
@@ -419,7 +436,8 @@ export const useSendMessage = () => {
             error.message.includes("network") ||
             error.message.includes("timeout") ||
             error.message.includes("connection") ||
-            error.message.includes("failed to fetch");
+            error.message.includes("failed to fetch") ||
+            error.message.includes("Client not initialized");
 
           if (shouldRetry) {
             console.log(
@@ -505,21 +523,60 @@ export const useConsent = () => {
 
   const allow = useCallback(
     async (addresses: string[]) => {
-      if (!client) return;
+      if (!client) {
+        console.warn("⚠️ Client not initialized for consent management");
+        return;
+      }
 
       try {
         console.log("🔄 Allowing conversations with:", addresses);
 
-        // V3 consent management
+        // **FIX**: Enhanced V3 consent management with proper error handling
         for (const address of addresses) {
-          // Update consent state
-          consentCache.current.set(address, true);
-          setConsentStates((prev) => new Map([...prev, [address, true]]));
+          try {
+            // Validate address format
+            if (!address || typeof address !== "string") {
+              console.warn("⚠️ Invalid address for consent:", address);
+              continue;
+            }
+
+            // **FIX**: Use proper V3 consent methods if available
+            if (client && typeof client === "object" && "contacts" in client) {
+              const contactsClient = client as any;
+              if (typeof contactsClient.contacts?.allow === "function") {
+                await contactsClient.contacts.allow(address);
+              } else {
+                console.log(
+                  "📝 Using fallback consent management for:",
+                  address,
+                );
+              }
+            } else {
+              console.log("📝 Using fallback consent management for:", address);
+            }
+
+            // Update consent state
+            consentCache.current.set(address, true);
+            setConsentStates((prev) => new Map([...prev, [address, true]]));
+
+            console.log("✅ Consent allowed for address:", address);
+          } catch (addressError) {
+            console.error(
+              "❌ Error allowing consent for address:",
+              address,
+              addressError,
+            );
+            // Continue with other addresses even if one fails
+          }
         }
 
-        console.log("✅ Consent allowed for addresses:", addresses);
+        console.log(
+          "✅ Consent management completed for addresses:",
+          addresses,
+        );
       } catch (error) {
-        console.error("❌ Error allowing consent:", error);
+        console.error("❌ Error in consent management:", error);
+        throw error;
       }
     },
     [client],
@@ -527,21 +584,57 @@ export const useConsent = () => {
 
   const deny = useCallback(
     async (addresses: string[]) => {
-      if (!client) return;
+      if (!client) {
+        console.warn("⚠️ Client not initialized for consent management");
+        return;
+      }
 
       try {
         console.log("🔄 Denying conversations with:", addresses);
 
-        // V3 consent management
+        // **FIX**: Enhanced V3 consent management with proper error handling
         for (const address of addresses) {
-          // Update consent state
-          consentCache.current.set(address, false);
-          setConsentStates((prev) => new Map([...prev, [address, false]]));
+          try {
+            // Validate address format
+            if (!address || typeof address !== "string") {
+              console.warn("⚠️ Invalid address for consent:", address);
+              continue;
+            }
+
+            // **FIX**: Use proper V3 consent methods if available
+            if (client && typeof client === "object" && "contacts" in client) {
+              const contactsClient = client as any;
+              if (typeof contactsClient.contacts?.block === "function") {
+                await contactsClient.contacts.block(address);
+              } else {
+                console.log(
+                  "📝 Using fallback consent management for:",
+                  address,
+                );
+              }
+            } else {
+              console.log("📝 Using fallback consent management for:", address);
+            }
+
+            // Update consent state
+            consentCache.current.set(address, false);
+            setConsentStates((prev) => new Map([...prev, [address, false]]));
+
+            console.log("✅ Consent denied for address:", address);
+          } catch (addressError) {
+            console.error(
+              "❌ Error denying consent for address:",
+              address,
+              addressError,
+            );
+            // Continue with other addresses even if one fails
+          }
         }
 
-        console.log("✅ Consent denied for addresses:", addresses);
+        console.log("✅ Consent denial completed for addresses:", addresses);
       } catch (error) {
-        console.error("❌ Error denying consent:", error);
+        console.error("❌ Error in consent denial:", error);
+        throw error;
       }
     },
     [client],
@@ -616,8 +709,17 @@ export const useStartConversation = () => {
         });
         const startTime = Date.now();
 
-        // **FIX**: V3 conversation creation - use newDm for direct messages
-        const conversation = await client.conversations.newDm(peerAddress);
+        // **FIX**: Enhanced V3 conversation creation with error handling
+        let conversation;
+        try {
+          // V3 conversation creation - use newDm for direct messages
+          conversation = await client.conversations.newDm(peerAddress);
+        } catch (conversationError) {
+          console.error("❌ Error creating conversation:", conversationError);
+          throw new Error(
+            `Failed to create conversation: ${conversationError instanceof Error ? conversationError.message : "Unknown error"}`,
+          );
+        }
 
         const endTime = Date.now();
         console.log("✅ Conversation started successfully", {
