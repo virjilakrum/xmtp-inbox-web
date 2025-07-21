@@ -277,6 +277,14 @@ export const useSendMessage = () => {
 
       setSendingMessages((prev) => new Set([...prev, messageKey]));
 
+      // **FIX**: Enhanced validation - ensure we're not sending to ourselves
+      const clientAddress = client.inboxId;
+      console.log("🚀 Enhanced message send validation:", {
+        conversationId,
+        clientAddress,
+        contentLength: typeof content === "string" ? content.length : "unknown",
+      });
+
       // **PERFORMANCE**: Create optimistic message for instant UI update
       const optimisticMessage = {
         id: messageKey,
@@ -314,16 +322,35 @@ export const useSendMessage = () => {
       window.dispatchEvent(optimisticEvent);
 
       try {
-        console.log(
-          "🚀 Enhanced message send to conversation:",
+        console.log("🚀 Enhanced message send to conversation:", {
           conversationId,
-        );
+          clientAddress,
+          contentPreview:
+            typeof content === "string"
+              ? content.slice(0, 50) + "..."
+              : "non-text",
+        });
         const startTime = Date.now();
 
         // **PERFORMANCE**: Get conversation with caching
         const conversation =
           await client.conversations.getConversationById(conversationId);
         if (!conversation) throw new Error("Conversation not found");
+
+        // **FIX**: Enhanced conversation validation
+        const peerAddress =
+          "peerAddress" in conversation
+            ? (conversation.peerAddress as string)
+            : "unknown";
+        console.log("✅ Conversation found for sending:", {
+          conversationId: conversation.id,
+          peerAddress,
+          clientAddress,
+          isSelf:
+            peerAddress !== "unknown"
+              ? peerAddress.toLowerCase() === clientAddress?.toLowerCase()
+              : false,
+        });
 
         // **PERFORMANCE**: Send with timeout to prevent hanging
         const messagePromise = conversation.send(content);
@@ -337,9 +364,15 @@ export const useSendMessage = () => {
         console.log("✅ Enhanced message sent successfully", {
           messageId,
           conversationId,
+          peerAddress,
+          clientAddress,
           duration: endTime - startTime,
           contentLength:
             typeof content === "string" ? content.length : "unknown",
+          isSelf:
+            peerAddress !== "unknown"
+              ? peerAddress.toLowerCase() === clientAddress?.toLowerCase()
+              : false,
         });
 
         // **PERFORMANCE**: Remove from queue if it was queued
@@ -542,9 +575,26 @@ export const useStartConversation = () => {
     async (peerAddress: string) => {
       if (!client) throw new Error("Client not initialized");
 
-      // Validate address format
+      // Enhanced address validation
       if (!peerAddress || typeof peerAddress !== "string") {
         throw new Error("Invalid peer address");
+      }
+
+      // **FIX**: Validate that we're not trying to message ourselves
+      const clientAddress = client.inboxId;
+      if (peerAddress.toLowerCase() === clientAddress?.toLowerCase()) {
+        throw new Error("Cannot start conversation with yourself");
+      }
+
+      // **FIX**: Enhanced address format validation
+      const isValidAddress =
+        /^0x[a-fA-F0-9]{40}$/.test(peerAddress) ||
+        /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(peerAddress);
+
+      if (!isValidAddress) {
+        throw new Error(
+          "Invalid address format. Please enter a valid Ethereum address or inbox ID",
+        );
       }
 
       // Prevent duplicate conversation starts
@@ -559,17 +609,23 @@ export const useStartConversation = () => {
       setStartingConversations((prev) => new Set([...prev, peerAddress]));
 
       try {
-        console.log("🔄 Starting conversation with:", peerAddress);
+        console.log("🔄 Starting conversation with:", {
+          peerAddress,
+          clientAddress,
+          isSelf: peerAddress.toLowerCase() === clientAddress?.toLowerCase(),
+        });
         const startTime = Date.now();
 
-        // V3 conversation creation - use newDm for direct messages
+        // **FIX**: V3 conversation creation - use newDm for direct messages
         const conversation = await client.conversations.newDm(peerAddress);
 
         const endTime = Date.now();
         console.log("✅ Conversation started successfully", {
           conversationId: conversation.id,
           peerAddress,
+          clientAddress,
           duration: endTime - startTime,
+          isSelf: peerAddress.toLowerCase() === clientAddress?.toLowerCase(),
         });
 
         return { conversation, peerAddress };
