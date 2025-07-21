@@ -13,14 +13,11 @@ export * from "./domHelpers";
  */
 export const safeConvertTimestamp = (
   sentAtNs: bigint | number | null | undefined,
-): Date => {
+): Date | null => {
   try {
     // Handle null/undefined
     if (sentAtNs === null || sentAtNs === undefined) {
-      console.warn(
-        "safeConvertTimestamp: received null/undefined timestamp, using current date",
-      );
-      return new Date();
+      return null;
     }
 
     // Convert to number if it's a bigint
@@ -33,7 +30,7 @@ export const safeConvertTimestamp = (
         "safeConvertTimestamp: received invalid timestamp number:",
         timestampNumber,
       );
-      return new Date();
+      return null;
     }
 
     // Convert from nanoseconds to milliseconds
@@ -61,13 +58,13 @@ export const safeConvertTimestamp = (
         "safeConvertTimestamp: created invalid date from:",
         milliseconds,
       );
-      return new Date();
+      return null;
     }
 
     return date;
   } catch (error) {
     console.error("safeConvertTimestamp: error converting timestamp:", error);
-    return new Date();
+    return null;
   }
 };
 
@@ -87,6 +84,9 @@ export const safeFormatTimestamp = (
 ): string => {
   try {
     const date = safeConvertTimestamp(sentAtNs);
+    if (!date) {
+      return "";
+    }
     return new Intl.DateTimeFormat("en-US", options).format(date);
   } catch (error) {
     console.error("safeFormatTimestamp: error formatting timestamp:", error);
@@ -104,12 +104,14 @@ export const safeFormatDate = (
 ): string => {
   try {
     const date = safeConvertTimestamp(sentAtNs);
-    return date.toLocaleDateString([], {
-      weekday: "long",
+    if (!date) {
+      return "";
+    }
+    return new Intl.DateTimeFormat("en-US", {
       year: "numeric",
       month: "long",
       day: "numeric",
-    });
+    }).format(date);
   } catch (error) {
     console.error("safeFormatDate: error formatting date:", error);
     return "Invalid date";

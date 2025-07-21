@@ -27,7 +27,7 @@ interface MessagePreviewCardProps {
   /**
    * What is the datetime of the message
    */
-  datetime?: Date;
+  datetime?: Date | null;
   /**
    * Are we waiting on anything loading?
    */

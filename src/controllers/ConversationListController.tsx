@@ -25,7 +25,7 @@ const processConversationData = (conversation: any) => {
     ? safeConvertTimestamp(lastMessage.sentAtNs)
     : conversation.createdAtNs
       ? safeConvertTimestamp(conversation.createdAtNs)
-      : new Date();
+      : null;
 
   // Get display address - safely handle peerInboxId and ensure it's a string
   const safeAddress =

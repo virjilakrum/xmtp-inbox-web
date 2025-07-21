@@ -443,11 +443,10 @@ export const useSendMessage = () => {
 
           messageId = await Promise.race([messagePromise, timeoutPromise]);
 
-          console.log("✅ DEBUG - Message sent successfully:", {
+          console.log(
+            "✅ DEBUG - Message sent successfully, messageId:",
             messageId,
-            conversationId: conversation.id,
-            peerAddress,
-          });
+          );
         } catch (sendError) {
           console.error("❌ DEBUG - Error sending message:", {
             error: sendError,
@@ -1065,9 +1064,12 @@ export const useStreamAllMessages = () => {
                 console.log(
                   "📊 DEBUG - Trimming message history to 500 messages",
                 );
-                return newMessages.slice(-500); // Keep only last 500 messages
+                const trimmedMessages = newMessages.slice(-500); // Keep only last 500 messages
+                console.log("✅ DEBUG - New messages state:", trimmedMessages);
+                return trimmedMessages;
               }
 
+              console.log("✅ DEBUG - New messages state:", newMessages);
               return newMessages;
             });
 
