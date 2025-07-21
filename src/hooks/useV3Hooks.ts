@@ -274,7 +274,7 @@ export const useCanMessage = () => {
   );
 };
 
-// Performance optimization: Enhanced sendMessage hook with optimistic UI and retry logic
+// **PERFORMANCE**: Enhanced sendMessage hook with comprehensive debugging
 export const useSendMessage = () => {
   const client = useClient();
   const [sendingMessages, setSendingMessages] = useState<Set<string>>(
@@ -314,12 +314,16 @@ export const useSendMessage = () => {
 
       setSendingMessages((prev) => new Set([...prev, messageKey]));
 
-      // **FIX**: Enhanced validation - ensure we're not sending to ourselves
+      // **DEBUG**: Enhanced validation with detailed logging
       const clientAddress = (client as any).inboxId;
-      console.log("🚀 Enhanced message send validation:", {
+      console.log("🚀 ENHANCED DEBUG - Message send validation:", {
         conversationId,
         clientAddress,
         contentLength: typeof content === "string" ? content.length : "unknown",
+        contentPreview:
+          typeof content === "string" ? content.slice(0, 100) : "non-text",
+        retryCount,
+        messageKey,
       });
 
       // **PERFORMANCE**: Create optimistic message for instant UI update
@@ -359,7 +363,7 @@ export const useSendMessage = () => {
       window.dispatchEvent(optimisticEvent);
 
       try {
-        console.log("🚀 Enhanced message send to conversation:", {
+        console.log("🚀 ENHANCED DEBUG - Starting message send process:", {
           conversationId,
           clientAddress,
           contentPreview:
@@ -369,26 +373,47 @@ export const useSendMessage = () => {
         });
         const startTime = Date.now();
 
-        // **FIX**: Enhanced conversation retrieval with error handling
+        // **DEBUG**: Enhanced conversation retrieval with detailed error handling
         let conversation;
         try {
+          console.log("🔍 DEBUG - Getting conversation by ID:", conversationId);
           conversation = await (
             client as any
           ).conversations.getConversationById(conversationId);
-          if (!conversation) throw new Error("Conversation not found");
+
+          if (!conversation) {
+            console.error(
+              "❌ DEBUG - Conversation not found for ID:",
+              conversationId,
+            );
+            throw new Error("Conversation not found");
+          }
+
+          console.log("✅ DEBUG - Conversation found:", {
+            id: conversation.id,
+            peerAddress: conversation.peerAddress,
+            peerInboxId: conversation.peerInboxId,
+            topic: conversation.topic,
+            isGroup: conversation.isGroup,
+          });
         } catch (conversationError) {
-          console.error("❌ Error getting conversation:", conversationError);
+          console.error("❌ DEBUG - Error getting conversation:", {
+            conversationId,
+            error: conversationError,
+            clientAddress,
+          });
           throw new Error(
             `Failed to get conversation: ${conversationError instanceof Error ? conversationError.message : "Unknown error"}`,
           );
         }
 
-        // **FIX**: Enhanced conversation validation
+        // **DEBUG**: Enhanced conversation validation with peer address check
         const peerAddress =
           "peerAddress" in conversation
             ? (conversation.peerAddress as string)
-            : "unknown";
-        console.log("✅ Conversation found for sending:", {
+            : conversation.peerInboxId || "unknown";
+
+        console.log("✅ DEBUG - Conversation validation:", {
           conversationId: conversation.id,
           peerAddress,
           clientAddress,
@@ -396,11 +421,20 @@ export const useSendMessage = () => {
             peerAddress !== "unknown"
               ? peerAddress.toLowerCase() === clientAddress?.toLowerCase()
               : false,
+          hasValidPeer:
+            peerAddress !== "unknown" && peerAddress !== clientAddress,
         });
 
-        // **FIX**: Enhanced message sending with proper error handling
+        // **DEBUG**: Enhanced message sending with comprehensive error handling
         let messageId;
         try {
+          console.log("🚀 DEBUG - Sending message to conversation:", {
+            conversationId: conversation.id,
+            peerAddress,
+            contentLength:
+              typeof content === "string" ? content.length : "unknown",
+          });
+
           // **PERFORMANCE**: Send with timeout to prevent hanging
           const messagePromise = conversation.send(content);
           const timeoutPromise = new Promise((_, reject) =>
@@ -408,15 +442,27 @@ export const useSendMessage = () => {
           );
 
           messageId = await Promise.race([messagePromise, timeoutPromise]);
+
+          console.log("✅ DEBUG - Message sent successfully:", {
+            messageId,
+            conversationId: conversation.id,
+            peerAddress,
+          });
         } catch (sendError) {
-          console.error("❌ Error sending message:", sendError);
+          console.error("❌ DEBUG - Error sending message:", {
+            error: sendError,
+            conversationId: conversation.id,
+            peerAddress,
+            contentLength:
+              typeof content === "string" ? content.length : "unknown",
+          });
           throw new Error(
             `Failed to send message: ${sendError instanceof Error ? sendError.message : "Unknown error"}`,
           );
         }
 
         const endTime = Date.now();
-        console.log("✅ Enhanced message sent successfully", {
+        console.log("✅ ENHANCED DEBUG - Message sent successfully", {
           messageId,
           conversationId,
           peerAddress,
@@ -455,7 +501,12 @@ export const useSendMessage = () => {
           optimisticId: messageKey,
         };
       } catch (error) {
-        console.error("❌ Error sending message:", error);
+        console.error("❌ ENHANCED DEBUG - Error sending message:", {
+          error,
+          conversationId,
+          retryCount,
+          messageKey,
+        });
 
         // **PERFORMANCE**: Dispatch error event
         const errorEvent = new CustomEvent("xmtp-message-sent-error", {
@@ -479,7 +530,7 @@ export const useSendMessage = () => {
 
           if (shouldRetry) {
             console.log(
-              `🔄 Queuing message for retry (attempt ${retryCount + 1}/3)`,
+              `🔄 DEBUG - Queuing message for retry (attempt ${retryCount + 1}/3)`,
             );
 
             // **PERFORMANCE**: Add to retry queue
@@ -695,63 +746,70 @@ export const useDb = () => {
   };
 };
 
-// Performance optimization: Enhanced conversation starting with validation
+// **PERFORMANCE**: Enhanced startConversation hook with comprehensive debugging
 export const useStartConversation = () => {
   const client = useClient();
-  const [startingConversations, setStartingConversations] = useState<
-    Set<string>
-  >(new Set());
 
   const startConversation = useCallback(
     async (peerAddress: string) => {
       if (!client) throw new Error("Client not initialized");
 
-      // Enhanced address validation
-      if (!peerAddress || typeof peerAddress !== "string") {
-        throw new Error("Invalid peer address");
-      }
+      console.log("🚀 ENHANCED DEBUG - Starting conversation with:", {
+        peerAddress,
+        clientAddress: (client as any).inboxId,
+      });
 
-      // **FIX**: Validate that we're not trying to message ourselves
+      // **DEBUG**: Enhanced validation - ensure we're not messaging self
       const clientAddress = (client as any).inboxId;
       if (peerAddress.toLowerCase() === clientAddress?.toLowerCase()) {
+        console.error("❌ DEBUG - Cannot start conversation with yourself:", {
+          peerAddress,
+          clientAddress,
+        });
         throw new Error("Cannot start conversation with yourself");
       }
 
-      // **FIX**: Enhanced address format validation
+      // **DEBUG**: Enhanced address format validation
       const isValidAddress =
-        /^0x[a-fA-F0-9]{40}$/.test(peerAddress) ||
-        /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(peerAddress);
+        /^[0-9a-fA-F]{42}$/.test(peerAddress) ||
+        /^[0-9a-fA-F]{64}$/.test(peerAddress);
 
       if (!isValidAddress) {
-        throw new Error(
-          "Invalid address format. Please enter a valid Ethereum address or inbox ID",
-        );
-      }
-
-      // Prevent duplicate conversation starts
-      if (startingConversations.has(peerAddress)) {
-        console.warn(
-          "⚠️ Conversation already being started with:",
+        console.error("❌ DEBUG - Invalid address format:", {
           peerAddress,
-        );
-        throw new Error("Conversation already being started");
+          length: peerAddress.length,
+          isValidAddress,
+        });
+        throw new Error("Invalid address format");
       }
 
-      setStartingConversations((prev) => new Set([...prev, peerAddress]));
+      console.log("✅ DEBUG - Address validation passed:", {
+        peerAddress,
+        clientAddress,
+        isValidAddress,
+      });
+
+      const startTime = Date.now();
 
       try {
-        console.log("🔄 Starting conversation with:", {
+        console.log(
+          "🚀 DEBUG - Creating V3 conversation with peer:",
           peerAddress,
-          clientAddress,
-          isSelf: peerAddress.toLowerCase() === clientAddress?.toLowerCase(),
-        });
-        const startTime = Date.now();
+        );
 
-        // **FIX**: Enhanced V3 conversation creation with error handling
+        // **DEBUG**: Enhanced V3 conversation creation with error handling
         let conversation;
         try {
           // V3 conversation creation - use newDm for direct messages
           conversation = await (client as any).conversations.newDm(peerAddress);
+
+          console.log("✅ DEBUG - V3 conversation created:", {
+            id: conversation.id,
+            peerAddress: conversation.peerAddress,
+            peerInboxId: conversation.peerInboxId,
+            topic: conversation.topic,
+            isGroup: conversation.isGroup,
+          });
 
           // **FIX**: Ensure the conversation has the peerAddress property set
           if (
@@ -760,10 +818,17 @@ export const useStartConversation = () => {
           ) {
             // Add peerAddress to the conversation object
             (conversation as any).peerAddress = peerAddress;
-            console.log("🔧 Added peerAddress to conversation:", peerAddress);
+            console.log(
+              "🔧 DEBUG - Added peerAddress to conversation:",
+              peerAddress,
+            );
           }
         } catch (conversationError) {
-          console.error("❌ Error creating conversation:", conversationError);
+          console.error("❌ DEBUG - Error creating conversation:", {
+            error: conversationError,
+            peerAddress,
+            clientAddress,
+          });
           throw new Error(
             `Failed to create conversation: ${conversationError instanceof Error ? conversationError.message : "Unknown error"}`,
           );
@@ -774,12 +839,13 @@ export const useStartConversation = () => {
           "peerAddress" in conversation
             ? (conversation as any).peerAddress
             : peerAddress;
-        console.log("✅ Conversation started successfully", {
+        console.log("✅ ENHANCED DEBUG - Conversation started successfully", {
           conversationId: conversation.id,
           peerAddress: conversationPeerAddress,
           clientAddress,
           duration: endTime - startTime,
           isSelf: peerAddress.toLowerCase() === clientAddress?.toLowerCase(),
+          hasValidPeer: conversationPeerAddress !== clientAddress,
         });
 
         // **FIX**: Return conversation with guaranteed peerAddress
@@ -791,23 +857,19 @@ export const useStartConversation = () => {
           peerAddress,
         };
       } catch (error) {
-        console.error("❌ Error starting conversation:", error);
-        throw error;
-      } finally {
-        setStartingConversations((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(peerAddress);
-          return newSet;
+        console.error("❌ ENHANCED DEBUG - Error in startConversation:", {
+          error,
+          peerAddress,
+          clientAddress,
         });
+        throw error;
       }
     },
-    [client, startingConversations],
+    [client],
   );
 
   return {
     startConversation,
-    isStarting: startingConversations.size > 0,
-    startingWith: Array.from(startingConversations),
   };
 };
 
@@ -940,6 +1002,7 @@ export const useStreamAllMessages = () => {
 
             // **PERFORMANCE**: Skip duplicates immediately
             if (seenMessages.current.has(messageId)) {
+              console.log("🔄 DEBUG - Duplicate message skipped:", messageId);
               return;
             }
 
@@ -955,7 +1018,7 @@ export const useStreamAllMessages = () => {
                 (streamMetrics.current.avgLatency + latency) / 2;
             }
 
-            console.log("🚀 Enhanced real-time message received:", {
+            console.log("🚀 ENHANCED DEBUG - Real-time message received:", {
               id: messageId,
               content:
                 typeof message.content === "string"
@@ -964,6 +1027,9 @@ export const useStreamAllMessages = () => {
               sender: message.senderInboxId,
               conversation: message.conversationId,
               latency: streamMetrics.current.avgLatency,
+              sentAtNs: message.sentAtNs,
+              hasContent: !!message.content,
+              contentType: typeof message.content,
             });
 
             // **PERFORMANCE**: Immediate state update with batching prevention
@@ -977,12 +1043,28 @@ export const useStreamAllMessages = () => {
               );
 
               if (exists) {
+                console.log(
+                  "🔄 DEBUG - Message already exists in state:",
+                  messageId,
+                );
                 return prev;
               }
+
+              console.log("✅ DEBUG - Adding new message to state:", {
+                messageId,
+                conversationId: message.conversationId,
+                contentLength:
+                  typeof message.content === "string"
+                    ? message.content.length
+                    : "unknown",
+              });
 
               // **PERFORMANCE**: Limit message history to prevent memory issues
               const newMessages = [...prev, message];
               if (newMessages.length > 1000) {
+                console.log(
+                  "📊 DEBUG - Trimming message history to 500 messages",
+                );
                 return newMessages.slice(-500); // Keep only last 500 messages
               }
 
@@ -1017,6 +1099,8 @@ export const useStreamAllMessages = () => {
               },
             );
             window.dispatchEvent(conversationEvent);
+          } else {
+            console.warn("⚠️ DEBUG - Invalid message received:", message);
           }
         };
 
