@@ -3,7 +3,7 @@
 > [!CAUTION]
 > This repository is no longer maintained. Active development of our example web client has been moved to the [xmtp-js](https://github.com/xmtp/xmtp-js/tree/main/apps/xmtp.chat) repository.
 
-# XMTP Inbox web chat app
+# zk-lokomotive web chat app via XMTP
 
 ![Unit and Component Tests](https://github.com/xmtp-labs/xmtp-inbox-web/actions/workflows/tests.yml/badge.svg)
 ![E2E Tests](https://github.com/xmtp-labs/xmtp-inbox-web/actions/workflows/cypress.yml/badge.svg)

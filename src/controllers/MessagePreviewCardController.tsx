@@ -19,11 +19,11 @@ import {
   getCachedPeerAddressName,
 } from "../helpers/conversation";
 // V3 imports
-import { CachedConversation } from "../types/xmtpV3Types";
+import { CachedConversationWithId } from "../types/xmtpV3Types";
 import { useConsent } from "../hooks/useV3Hooks";
 
 interface MessagePreviewCardControllerProps {
-  convo: CachedConversation;
+  convo: CachedConversationWithId;
 }
 
 export const MessagePreviewCardController = ({
@@ -61,7 +61,7 @@ export const MessagePreviewCardController = ({
   const isSelected = conversationTopic === convo.id; // V3 uses id instead of topic
 
   const onConvoClick = useCallback(
-    (conversation: CachedConversation) => {
+    (conversation: CachedConversationWithId) => {
       const peerAddress = conversation.peerAddress as ETHAddress; // Use peerAddress for compatibility
       if (recipientAddress !== peerAddress) {
         const avatar = getCachedPeerAddressAvatar(conversation);

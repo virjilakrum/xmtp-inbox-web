@@ -2,7 +2,7 @@
   "name": "xmtp-inbox-web",
   "version": "1.0.0",
   "private": true,
-  "description": "XMTP CHAT FIRST PARTY WEB APP",
+  "description": "zk-lokomotive",
   "homepage": "https://github.com/xmtp-labs/xmtp-inbox-web",
   "bugs": {
     "url": "https://github.com/xmtp-labs/xmtp-inbox-web/issues"

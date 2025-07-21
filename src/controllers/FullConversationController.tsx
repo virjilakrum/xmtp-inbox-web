@@ -40,93 +40,218 @@ type V3Message = {
   effectType?: EffectType;
 };
 
-// Real V3 useMessages hook implementation
+// **PERFORMANCE**: Real V3 useMessages hook with fast updates and caching
 const useMessages = (
   conversation: CachedConversation,
-): { messages: V3Message[]; isLoading: boolean } => {
+): { messages: V3Message[]; isLoading: boolean; error: string | null } => {
   const client = useClient();
   const [messages, setMessages] = useState<V3Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const messagesCache = useRef<Map<string, V3Message[]>>(new Map());
+  const lastLoadTime = useRef<number>(0);
+  const retryCount = useRef<number>(0);
+  const maxRetries = 3;
 
-  const loadMessages = useCallback(async () => {
-    if (!client || !conversation.conversationId) return;
-
-    setIsLoading(true);
-    try {
-      // Get V3 conversation by ID
-      const v3Conversation = await client.conversations.getConversationById(
-        conversation.conversationId,
-      );
-      if (!v3Conversation) {
-        setMessages([]);
+  const loadMessages = useCallback(
+    async (forceRefresh = false) => {
+      if (!client || !conversation.conversationId) {
+        console.log("❌ No client or conversation ID available");
+        setError("No client or conversation ID available");
         return;
       }
 
-      // Load messages from V3 conversation
-      const v3Messages = await v3Conversation.messages();
+      // **PERFORMANCE**: Check cache first for instant loading
+      const cacheKey = conversation.conversationId;
+      const cached = messagesCache.current.get(cacheKey);
+      const now = Date.now();
 
-      // Convert V3 messages to our format
-      const convertedMessages: V3Message[] = v3Messages.map((msg: any) => ({
-        id: msg.id,
-        uuid: msg.id, // V3 uses id
-        xmtpID: msg.id, // V3 uses id
-        content: msg.content,
-        contentFallback: msg.fallback,
-        contentType: msg.contentType?.toString() || "",
-        conversationTopic: conversation.topic || "",
-        senderAddress: msg.senderInboxId || "", // V3 uses inboxId
-        sentAt: safeConvertTimestamp(msg.sentAtNs), // Safe timestamp conversion
-        effectType: msg.content?.effectType,
-      }));
+      // Use cache if available and less than 5 seconds old (unless forced refresh)
+      if (!forceRefresh && cached && now - lastLoadTime.current < 5000) {
+        console.log("🚀 Fast using cached messages:", cached.length);
+        setMessages(cached);
+        setError(null);
+        return;
+      }
 
-      setMessages(convertedMessages);
+      setIsLoading(true);
+      setError(null);
 
-      console.log("✅ Messages loaded for conversation:", {
-        conversationId: conversation.conversationId,
-        messageCount: convertedMessages.length,
-      });
-    } catch (error) {
-      console.error("Error loading V3 messages:", error);
-      setMessages([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [client, conversation.conversationId, conversation.topic]);
-
-  useEffect(() => {
-    loadMessages();
-  }, [loadMessages]);
-
-  // **FIX**: Listen for new message events and reload if it's for this conversation
-  useEffect(() => {
-    const handleMessageReceived = (event: CustomEvent) => {
-      const { conversationId, isCurrentConversation } = event.detail;
-
-      if (
-        conversationId === conversation.conversationId &&
-        isCurrentConversation
-      ) {
+      try {
         console.log(
-          "🔄 Reloading messages for current conversation:",
-          conversationId,
+          "🔄 Loading messages for conversation:",
+          conversation.conversationId,
         );
-        loadMessages();
+
+        // **PERFORMANCE**: Get V3 conversation with timeout
+        const conversationPromise = client.conversations.getConversationById(
+          conversation.conversationId,
+        );
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Conversation load timeout")),
+            10000,
+          ),
+        );
+
+        const v3Conversation = await Promise.race([
+          conversationPromise,
+          timeoutPromise,
+        ]);
+
+        if (!v3Conversation) {
+          console.log("❌ No conversation found");
+          setMessages([]);
+          setError("Conversation not found");
+          return;
+        }
+
+        console.log("✅ Conversation loaded, loading messages...");
+
+        // **PERFORMANCE**: Load messages with timeout
+        const messagesPromise = (v3Conversation as any).messages();
+        const messagesTimeoutPromise = new Promise<any[]>((_, reject) =>
+          setTimeout(() => reject(new Error("Messages load timeout")), 15000),
+        );
+
+        const v3Messages = await Promise.race([
+          messagesPromise,
+          messagesTimeoutPromise,
+        ]);
+
+        if (!v3Messages || !Array.isArray(v3Messages)) {
+          console.log("❌ No messages or invalid messages array");
+          setMessages([]);
+          setError("No messages available");
+          return;
+        }
+
+        // **PERFORMANCE**: Process messages efficiently
+        const processedMessages = v3Messages
+          .filter((msg: any) => msg && msg.id)
+          .map((msg: any) => ({
+            id: msg.id,
+            uuid: msg.id,
+            xmtpID: msg.id,
+            content: msg.content || {},
+            contentFallback: msg.contentFallback,
+            contentType: msg.contentType || "text",
+            conversationTopic: conversation.conversationId || "",
+            senderAddress: msg.senderAddress || "",
+            sentAt: new Date(msg.sentAt || Date.now()),
+            effectType: msg.content?.effectType,
+          }))
+          .sort(
+            (a: V3Message, b: V3Message) =>
+              a.sentAt.getTime() - b.sentAt.getTime(),
+          );
+
+        console.log("✅ Messages processed:", processedMessages.length);
+
+        // **PERFORMANCE**: Update cache and state
+        messagesCache.current.set(cacheKey, processedMessages);
+        lastLoadTime.current = now;
+        setMessages(processedMessages);
+        setError(null);
+        retryCount.current = 0;
+      } catch (loadError) {
+        console.error("❌ Error loading messages:", loadError);
+
+        // **PERFORMANCE**: Retry logic with exponential backoff
+        if (retryCount.current < maxRetries) {
+          retryCount.current++;
+          const delay = Math.pow(2, retryCount.current) * 1000;
+          console.log(
+            `🔄 Retrying in ${delay}ms (attempt ${retryCount.current}/${maxRetries})`,
+          );
+
+          setTimeout(() => {
+            loadMessages(forceRefresh);
+          }, delay);
+        } else {
+          setError(
+            `Failed to load messages: ${loadError instanceof Error ? loadError.message : "Unknown error"}`,
+          );
+          setMessages([]);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [client, conversation.conversationId],
+  );
+
+  // **PERFORMANCE**: Load messages on mount and conversation change
+  useEffect(() => {
+    if (conversation.conversationId) {
+      console.log(
+        "🔄 Conversation changed, loading messages:",
+        conversation.conversationId,
+      );
+      loadMessages();
+    }
+  }, [conversation.conversationId, loadMessages]);
+
+  // **PERFORMANCE**: Handle real-time message updates
+  useEffect(() => {
+    const handleFastMessageReceived = (event: CustomEvent) => {
+      const { message, conversationId } = event.detail;
+
+      if (conversationId === conversation.conversationId) {
+        console.log("🚀 Fast message received:", message.id);
+
+        setMessages((prev) => {
+          const newMessages = [...prev];
+          const existingIndex = newMessages.findIndex(
+            (m) => m.id === message.id,
+          );
+
+          if (existingIndex >= 0) {
+            newMessages[existingIndex] = message;
+          } else {
+            newMessages.push(message);
+          }
+
+          // Update cache
+          messagesCache.current.set(conversation.conversationId!, newMessages);
+          return newMessages.sort(
+            (a, b) => a.sentAt.getTime() - b.sentAt.getTime(),
+          );
+        });
+      }
+    };
+
+    const handleRefreshConversation = (event: CustomEvent) => {
+      const { conversationId } = event.detail;
+
+      if (conversationId === conversation.conversationId) {
+        console.log("🔄 Refreshing conversation messages");
+        loadMessages(true);
       }
     };
 
     window.addEventListener(
-      "xmtp-message-received",
-      handleMessageReceived as EventListener,
+      "xmtp-fast-message-received",
+      handleFastMessageReceived as EventListener,
     );
+    window.addEventListener(
+      "xmtp-conversation-refresh",
+      handleRefreshConversation as EventListener,
+    );
+
     return () => {
       window.removeEventListener(
-        "xmtp-message-received",
-        handleMessageReceived as EventListener,
+        "xmtp-fast-message-received",
+        handleFastMessageReceived as EventListener,
+      );
+      window.removeEventListener(
+        "xmtp-conversation-refresh",
+        handleRefreshConversation as EventListener,
       );
     };
   }, [conversation.conversationId, loadMessages]);
 
-  return { messages, isLoading };
+  return { messages, isLoading, error };
 };
 
 type FullConversationControllerProps = {
@@ -155,7 +280,18 @@ export const FullConversationController: React.FC<
   }, [conversation.peerAddress]);
 
   // XMTP Hooks
-  const { messages, isLoading } = useMessages(conversation);
+  const { messages, isLoading, error } = useMessages(conversation);
+
+  // **PERFORMANCE**: Enhanced debugging
+  useEffect(() => {
+    console.log("📊 FullConversationController state:", {
+      conversationId: conversation.conversationId,
+      messagesCount: messages.length,
+      isLoading,
+      error,
+      isReady,
+    });
+  }, [conversation.conversationId, messages.length, isLoading, error, isReady]);
 
   const messagesWithDates = useMemo(
     () =>
@@ -216,6 +352,28 @@ export const FullConversationController: React.FC<
       }),
     [messages, conversation, conversationTopic],
   );
+
+  // **PERFORMANCE**: Show error state if loading failed
+  if (error && !isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center p-6">
+          <div className="text-red-500 text-lg mb-2">⚠️</div>
+          <div className="text-gray-600 dark:text-gray-400 mb-4">
+            Failed to load messages
+          </div>
+          <div className="text-sm text-gray-500 dark:text-gray-500">
+            {error}
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200">
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

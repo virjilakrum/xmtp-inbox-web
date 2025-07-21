@@ -1,5 +1,5 @@
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useDisconnect, useWalletClient } from "wagmi";
 import type { Attachment } from "@xmtp/content-type-remote-attachment";
 import { useNavigate } from "react-router-dom";
@@ -37,44 +37,57 @@ const Inbox: React.FC<{ children?: React.ReactNode }> = () => {
   // V3 useStreamConversations implemented via useConversations hook
   // The useConversations hook already provides real-time conversation updates
 
-  // **FIX**: Add real-time message streaming to receive messages instantly
+  // **PERFORMANCE**: Enhanced real-time message streaming with instant UI updates
   const {
     messages: streamedMessages,
     error: streamError,
     isStreaming,
     messageCount,
+    connectionStatus,
+    metrics,
   } = useStreamAllMessages();
 
   const { consent, allow, deny } = useConsent();
 
-  // **FIX**: Enhanced debugging for message receiving flow
+  // **PERFORMANCE**: Fast conversation refresh with debouncing
+  const [lastRefresh, setLastRefresh] = useState(0);
+  const refreshThrottleRef = useRef<NodeJS.Timeout | null>(null);
+
+  // **PERFORMANCE**: Enhanced debugging for message receiving flow
   useEffect(() => {
-    console.log("📊 Inbox state debug:", {
+    console.log("📊 Fast Inbox state debug:", {
       clientExists: !!client,
       conversationsCount: conversations.length,
       selectedConversation: selectedConversation?.conversation?.id,
       streamingActive: isStreaming,
+      connectionStatus,
       streamedMessagesCount: streamedMessages.length,
       conversationTopic: useXmtpStore.getState().conversationTopic,
       recipientAddress: useXmtpStore.getState().recipientAddress,
+      metrics: {
+        avgLatency: metrics.avgLatency,
+        messagesReceived: metrics.messagesReceived,
+      },
     });
   }, [
     client,
     conversations.length,
     selectedConversation,
     isStreaming,
+    connectionStatus,
     streamedMessages.length,
+    metrics,
   ]);
 
-  // **FIX**: Debug conversation changes
+  // **PERFORMANCE**: Fast conversation debugging
   useEffect(() => {
     if (conversations.length > 0) {
-      console.log("💬 Conversations updated:", {
+      console.log("💬 Fast conversations updated:", {
         count: conversations.length,
-        conversations: conversations.map((c) => ({
+        conversations: conversations.slice(0, 3).map((c) => ({
           id: c.id,
           peerInboxId: c.peerInboxId,
-          lastMessageContent: c.lastMessage?.content?.slice(0, 50),
+          lastMessageContent: c.lastMessage?.content?.slice(0, 30),
         })),
       });
     }
@@ -90,112 +103,148 @@ const Inbox: React.FC<{ children?: React.ReactNode }> = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client]);
 
-  // **FIX**: Handle real-time message streaming with better UI updates
+  // **PERFORMANCE**: Enhanced real-time message processing with instant UI updates
   useEffect(() => {
     if (streamedMessages.length > 0) {
       const latestMessage = streamedMessages[streamedMessages.length - 1];
-      console.log("📨 New message received via stream:", {
+      console.log("🚀 Fast message received via stream:", {
         id: latestMessage.id,
         content: latestMessage.content,
         sender: latestMessage.senderInboxId,
         conversation: latestMessage.conversationId,
       });
 
-      // **FIX**: Enhanced message processing for proper UI updates
-      const processNewMessage = async () => {
+      // **PERFORMANCE**: Instant message processing without blocking
+      const processNewMessage = () => {
         try {
-          // 1. Check if this message belongs to the currently selected conversation
+          // 1. **PERFORMANCE**: Fast conversation topic check
           const currentConversationTopic =
             useXmtpStore.getState().conversationTopic;
           const isCurrentConversation =
             currentConversationTopic === latestMessage.conversationId;
 
-          console.log("📨 Processing new message:", {
+          console.log("🚀 Fast processing new message:", {
             messageId: latestMessage.id,
             conversationId: latestMessage.conversationId,
             isCurrentConversation,
             currentConversationTopic,
           });
 
-          // 2. Refresh conversations to update last message and order
-          await refreshConversations();
+          // 2. **PERFORMANCE**: Throttled conversation refresh to prevent spam
+          const now = Date.now();
+          if (now - lastRefresh > 1000) {
+            // Max 1 refresh per second
+            setLastRefresh(now);
 
-          // 3. If this is for the current conversation, trigger a conversation refresh
-          if (isCurrentConversation) {
-            console.log("🔄 Refreshing current conversation messages");
-            // The FullConversationController will pick up the new message
-            // through its message loading mechanism
+            // **PERFORMANCE**: Debounced refresh to batch multiple updates
+            if (refreshThrottleRef.current) {
+              clearTimeout(refreshThrottleRef.current);
+            }
+
+            refreshThrottleRef.current = setTimeout(async () => {
+              try {
+                await refreshConversations();
+                console.log("🚀 Fast conversation list refreshed");
+              } catch (error) {
+                console.error("❌ Fast conversation refresh failed:", error);
+              }
+            }, 200); // Batch updates over 200ms
           }
 
-          // 4. Update unread counts and UI state
-          const store = useXmtpStore.getState();
-          if (!isCurrentConversation) {
-            // Increment unread count for the conversation
-            console.log("📬 Message received in background conversation");
-          }
-
-          // 5. Trigger custom event for other components to react
-          const event = new CustomEvent("xmtp-message-received", {
+          // 3. **PERFORMANCE**: Instant event dispatch for immediate UI updates
+          const event = new CustomEvent("xmtp-fast-message-received", {
             detail: {
               message: latestMessage,
               conversationId: latestMessage.conversationId,
               isCurrentConversation,
+              timestamp: Date.now(),
+              streamMetrics: metrics,
             },
           });
           window.dispatchEvent(event);
 
-          // 6. Show notification if not in current conversation
-          if (!isCurrentConversation) {
+          // 4. **PERFORMANCE**: Background conversation selection if needed
+          if (!currentConversationTopic && latestMessage.conversationId) {
             console.log(
-              "🔔 New message notification for background conversation",
+              "🚀 Fast auto-selecting new conversation:",
+              latestMessage.conversationId,
             );
-            // Could show toast notification here
+            setTimeout(() => {
+              const store = useXmtpStore.getState();
+              store.setConversationTopic(latestMessage.conversationId);
+
+              if (latestMessage.senderInboxId) {
+                store.setRecipientAddress(latestMessage.senderInboxId);
+                store.setRecipientState("valid");
+                store.setRecipientOnNetwork(true);
+              }
+            }, 100); // Slight delay to prevent race conditions
           }
         } catch (error) {
-          console.error("❌ Error processing new message:", error);
+          console.error("❌ Fast message processing error:", error);
         }
       };
 
-      // Process the message asynchronously
-      processNewMessage();
+      // **PERFORMANCE**: Use requestAnimationFrame for smooth UI updates
+      requestAnimationFrame(processNewMessage);
     }
-  }, [streamedMessages]);
+  }, [streamedMessages, refreshConversations, lastRefresh, metrics]);
 
-  // **FIX**: Enhanced conversation refresh listener
+  // **PERFORMANCE**: Enhanced conversation refresh listener with batching
   useEffect(() => {
-    const handleMessageReceived = (event: CustomEvent) => {
-      const { conversationId, isCurrentConversation } = event.detail;
-      console.log("🔄 Handling message received event:", {
+    const handleFastMessageReceived = (event: CustomEvent) => {
+      const { conversationId, isCurrentConversation, streamMetrics } =
+        event.detail;
+
+      console.log("🚀 Fast handling message received event:", {
         conversationId,
         isCurrentConversation,
+        avgLatency: streamMetrics.avgLatency,
       });
 
-      // Force a re-render by updating a state value
-      // This ensures the conversation list and current conversation update
+      // **PERFORMANCE**: Immediate UI feedback for current conversation
       if (isCurrentConversation) {
-        // The conversation will automatically refresh through its hooks
-        console.log("✅ Current conversation will auto-refresh");
+        // Trigger immediate re-render for current conversation
+        window.dispatchEvent(
+          new CustomEvent("xmtp-refresh-current-conversation", {
+            detail: { conversationId },
+          }),
+        );
       }
     };
 
     window.addEventListener(
-      "xmtp-message-received",
-      handleMessageReceived as EventListener,
+      "xmtp-fast-message-received",
+      handleFastMessageReceived as EventListener,
     );
     return () => {
       window.removeEventListener(
-        "xmtp-message-received",
-        handleMessageReceived as EventListener,
+        "xmtp-fast-message-received",
+        handleFastMessageReceived as EventListener,
       );
+      if (refreshThrottleRef.current) {
+        clearTimeout(refreshThrottleRef.current);
+      }
     };
   }, []);
 
-  // **FIX**: Handle streaming errors with user feedback
+  // **PERFORMANCE**: Connection status monitoring with user feedback
+  useEffect(() => {
+    if (connectionStatus === "reconnecting") {
+      console.log("🔄 Fast streaming reconnecting...");
+      // Could show user notification about reconnection
+    } else if (connectionStatus === "connected") {
+      console.log("✅ Fast streaming connected");
+    } else if (connectionStatus === "disconnected" && client) {
+      console.warn("⚠️ Fast streaming disconnected");
+    }
+  }, [connectionStatus, client]);
+
+  // **PERFORMANCE**: Enhanced streaming error handling
   useEffect(() => {
     if (streamError) {
-      console.error("❌ Message streaming error:", streamError);
-      // Could show user notification about connection issues
-      // For now, just log the error - in production you might want to show a toast
+      console.error("❌ Fast message streaming error:", streamError);
+      // **PERFORMANCE**: Could implement retry logic or show user notification
     }
   }, [streamError]);
 

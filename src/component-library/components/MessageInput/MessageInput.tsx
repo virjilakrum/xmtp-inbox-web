@@ -1,581 +1,359 @@
-import { useState, useRef, useEffect, useCallback, memo } from "react";
-import {
-  PaperAirplaneIcon,
-  PaperClipIcon,
-  XIcon,
-  CloudUploadIcon,
-  ExclamationCircleIcon,
-  CheckCircleIcon,
-  EmojiHappyIcon,
-} from "@heroicons/react/outline";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import type { Attachment } from "@xmtp/content-type-remote-attachment";
-import { CachedConversationWithId } from "../../../types/xmtpV3Types";
+import { classNames } from "../../../helpers";
+
+interface OptimisticMessage {
+  id: string;
+  content: string;
+  timestamp: number;
+  status: "sending" | "sent" | "failed";
+}
 
 interface MessageInputProps {
-  peerAddress?: string;
-  isDisabled?: boolean;
-  conversation?: CachedConversationWithId | null;
+  onSendMessage: (message: string) => Promise<void>;
+  disabled?: boolean;
+  placeholder?: string;
   attachment?: Attachment;
   attachmentPreview?: string;
   setAttachment?: (attachment: Attachment | undefined) => void;
-  setAttachmentPreview?: (url: string | undefined) => void;
-  setIsDragActive?: (status: boolean) => void;
-  onSendMessage?: (message: string) => Promise<void>;
-  disabled?: boolean;
-  placeholder?: string;
-  maxLength?: number;
-  showTypingIndicator?: boolean;
-  lastMessageStatus?: "sending" | "sent" | "delivered" | "failed" | null;
+  setAttachmentPreview?: (preview: string | undefined) => void;
+  setIsDragActive?: (active: boolean) => void;
+  optimisticMessages?: OptimisticMessage[];
 }
 
-const MessageInput: React.FC<MessageInputProps> = memo(
-  ({
-    peerAddress,
-    isDisabled = false,
-    conversation,
-    attachment,
-    attachmentPreview,
-    setAttachment,
-    setAttachmentPreview,
-    setIsDragActive,
-    onSendMessage,
-    disabled = false,
-    placeholder = "Type your message...",
-    maxLength = 4000,
-    showTypingIndicator = false,
-    lastMessageStatus = null,
-  }) => {
-    const [message, setMessage] = useState("");
-    const [isFocused, setIsFocused] = useState(false);
-    const [isDragActive, setIsDragActiveLocal] = useState(false);
-    const [isSending, setIsSending] = useState(false);
-    const [sendError, setSendError] = useState<string | null>(null);
-    const [isTyping, setIsTyping] = useState(false);
-    const [characterCount, setCharacterCount] = useState(0);
+export const MessageInput: React.FC<MessageInputProps> = ({
+  onSendMessage,
+  disabled = false,
+  placeholder = "Type a message...",
+  attachment,
+  attachmentPreview,
+  setAttachment,
+  setAttachmentPreview,
+  setIsDragActive,
+  optimisticMessages = [],
+}) => {
+  const [message, setMessage] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [rows, setRows] = useState(1);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Performance optimization: Refs for DOM elements
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    const lastMessageRef = useRef<string>("");
+  // **PERFORMANCE**: Auto-resize textarea
+  const adjustHeight = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      const scrollHeight = textarea.scrollHeight;
+      const maxHeight = 120; // Max height for 5 lines
+      const newHeight = Math.min(scrollHeight, maxHeight);
+      textarea.style.height = `${newHeight}px`;
 
-    // Performance optimization: Auto-resize textarea
-    const adjustTextareaHeight = useCallback(() => {
-      const textarea = textareaRef.current;
-      if (textarea) {
-        textarea.style.height = "auto";
-        textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
-      }
-    }, []);
+      // Calculate rows for styling
+      const lineHeight = 20;
+      const newRows = Math.min(
+        Math.max(1, Math.ceil(newHeight / lineHeight)),
+        6,
+      );
+      setRows(newRows);
+    }
+  }, []);
 
-    // Performance optimization: Typing indicator logic
-    const handleTypingIndicator = useCallback(() => {
-      if (showTypingIndicator) {
-        setIsTyping(true);
+  useEffect(() => {
+    adjustHeight();
+  }, [message, adjustHeight]);
 
-        if (typingTimeoutRef.current) {
-          clearTimeout(typingTimeoutRef.current);
-        }
+  // **PERFORMANCE**: Enhanced send handler with optimistic UI
+  const handleSend = useCallback(async () => {
+    if (!message.trim() || disabled || isSending) return;
 
-        typingTimeoutRef.current = setTimeout(() => {
-          setIsTyping(false);
-        }, 1000);
-      }
-    }, [showTypingIndicator]);
+    const messageToSend = message.trim();
+    setIsSending(true);
 
-    // Performance optimization: Message validation
-    const validateMessage = useCallback(
-      (msg: string) => {
-        if (!msg.trim())
-          return { isValid: false, error: "Message cannot be empty" };
-        if (msg.length > maxLength)
-          return {
-            isValid: false,
-            error: `Message is too long (${msg.length}/${maxLength} characters)`,
-          };
-        return { isValid: true, error: null };
-      },
-      [maxLength],
-    );
+    // **PERFORMANCE**: Clear input immediately for better UX
+    setMessage("");
+    setRows(1);
 
-    // Enhanced message handling with validation
-    const handleMessageChange = useCallback(
-      (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        const newMessage = e.target.value;
+    try {
+      await onSendMessage(messageToSend);
+    } catch (error) {
+      console.error("Failed to send message:", error);
+      // **PERFORMANCE**: Restore message on error
+      setMessage(messageToSend);
+    } finally {
+      setIsSending(false);
+    }
+  }, [message, disabled, isSending, onSendMessage]);
 
-        // Enforce character limit
-        if (newMessage.length > maxLength) {
-          return;
-        }
-
-        setMessage(newMessage);
-        setCharacterCount(newMessage.length);
-        setSendError(null);
-
-        // Handle typing indicator
-        handleTypingIndicator();
-
-        // Auto-resize textarea
-        setTimeout(adjustTextareaHeight, 0);
-      },
-      [maxLength, handleTypingIndicator, adjustTextareaHeight],
-    );
-
-    // Enhanced attachment handling with validation
-    const handleAttachmentDrop = useCallback(
-      (e: React.DragEvent) => {
+  // **PERFORMANCE**: Handle keyboard shortcuts
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        setIsDragActiveLocal(false);
-        setIsDragActive?.(false);
+        handleSend();
+      }
+    },
+    [handleSend],
+  );
 
-        const files = Array.from(e.dataTransfer.files);
-        if (files.length === 0) return;
-
-        const file = files[0];
-        console.log("🔄 Processing attachment:", {
-          name: file.name,
-          size: file.size,
-          type: file.type,
-        });
-
-        // Validate file
-        const maxSize = 25 * 1024 * 1024; // 25MB
+  // **PERFORMANCE**: Handle file selection
+  const handleFileSelect = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file && setAttachment && setAttachmentPreview) {
+        // Basic file validation
+        const maxSize = 10 * 1024 * 1024; // 10MB
         if (file.size > maxSize) {
-          setSendError("File is too large (max 25MB)");
+          alert("File too large. Please select a file under 10MB.");
           return;
         }
 
-        const allowedTypes = [
-          "image/jpeg",
-          "image/png",
-          "image/gif",
-          "image/webp",
-          "video/mp4",
-          "video/webm",
-          "audio/mpeg",
-          "audio/ogg",
-          "application/pdf",
-          "text/plain",
-        ];
+        // Create attachment object (simplified)
+        const attachment: Attachment = {
+          filename: file.name,
+          mimeType: file.type,
+          data: new Uint8Array(), // Would be populated in real implementation
+        };
 
-        if (!allowedTypes.includes(file.type)) {
-          setSendError("File type not supported");
-          return;
-        }
+        setAttachment(attachment);
 
-        // Process the file (placeholder for actual attachment processing)
-        // This would typically involve uploading to storage and creating attachment
-        console.log("✅ Attachment validated successfully");
-      },
-      [setIsDragActive],
-    );
-
-    // Enhanced drag handlers
-    const handleDragEnter = useCallback(
-      (e: React.DragEvent) => {
-        e.preventDefault();
-        setIsDragActiveLocal(true);
-        setIsDragActive?.(true);
-      },
-      [setIsDragActive],
-    );
-
-    const handleDragLeave = useCallback(
-      (e: React.DragEvent) => {
-        e.preventDefault();
-        if (
-          !e.relatedTarget ||
-          !e.currentTarget.contains(e.relatedTarget as Node)
-        ) {
-          setIsDragActiveLocal(false);
-          setIsDragActive?.(false);
-        }
-      },
-      [setIsDragActive],
-    );
-
-    const handleDragOver = useCallback((e: React.DragEvent) => {
-      e.preventDefault();
-    }, []);
-
-    // Enhanced send handler with retry logic
-    const handleSend = useCallback(async () => {
-      if (!onSendMessage) return;
-
-      const trimmedMessage = message.trim();
-      const validation = validateMessage(trimmedMessage);
-
-      if (!validation.isValid) {
-        setSendError(validation.error || "Invalid message");
-        return;
+        // Create preview URL
+        const previewUrl = URL.createObjectURL(file);
+        setAttachmentPreview(previewUrl);
       }
+    },
+    [setAttachment, setAttachmentPreview],
+  );
 
-      if (!trimmedMessage && !attachment) {
-        setSendError("Cannot send empty message");
-        return;
-      }
+  // **PERFORMANCE**: Remove attachment
+  const removeAttachment = useCallback(() => {
+    if (setAttachment && setAttachmentPreview) {
+      setAttachment(undefined);
+      setAttachmentPreview(undefined);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }, [setAttachment, setAttachmentPreview]);
 
-      setIsSending(true);
-      setSendError(null);
-      lastMessageRef.current = trimmedMessage;
-
-      try {
-        console.log("🔄 Sending message:", {
-          length: trimmedMessage.length,
-          hasAttachment: !!attachment,
-          peerAddress: peerAddress?.slice(0, 10) + "...",
-        });
-
-        await onSendMessage(trimmedMessage);
-
-        // Clear form on successful send
-        setMessage("");
-        setCharacterCount(0);
-        setIsTyping(false);
-
-        // Reset textarea height
-        setTimeout(adjustTextareaHeight, 0);
-
-        console.log("✅ Message sent successfully");
-      } catch (error) {
-        console.error("❌ Failed to send message:", error);
-        setSendError(
-          error instanceof Error ? error.message : "Failed to send message",
-        );
-      } finally {
-        setIsSending(false);
-      }
-    }, [
-      message,
-      attachment,
-      validateMessage,
-      onSendMessage,
-      peerAddress,
-      adjustTextareaHeight,
-    ]);
-
-    // Enhanced retry functionality
-    const handleRetry = useCallback(() => {
-      if (lastMessageRef.current) {
-        setMessage(lastMessageRef.current);
-        setCharacterCount(lastMessageRef.current.length);
-        setSendError(null);
-        setTimeout(adjustTextareaHeight, 0);
-      }
-    }, [adjustTextareaHeight]);
-
-    // Enhanced keyboard handling
-    const handleKeyPress = useCallback(
-      (e: React.KeyboardEvent) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          handleSend();
-        }
-      },
-      [handleSend],
-    );
-
-    // Performance optimization: Auto-focus on mount
-    useEffect(() => {
-      if (textareaRef.current && !disabled && !isDisabled) {
-        textareaRef.current.focus();
-      }
-    }, [disabled, isDisabled]);
-
-    // Performance optimization: Cleanup on unmount
-    useEffect(() => {
-      return () => {
-        if (typingTimeoutRef.current) {
-          clearTimeout(typingTimeoutRef.current);
-        }
-      };
-    }, []);
-
-    // Performance optimization: Memoized status indicator
-    const statusIndicator = useCallback(() => {
-      switch (lastMessageStatus) {
-        case "sending":
-          return (
-            <div className="flex items-center space-x-2 text-blue-500">
-              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-              <span className="text-sm">Sending...</span>
-            </div>
-          );
-        case "sent":
-          return (
-            <div className="flex items-center space-x-2 text-green-500">
-              <CheckCircleIcon className="w-4 h-4" />
-              <span className="text-sm">Sent</span>
-            </div>
-          );
-        case "delivered":
-          return (
-            <div className="flex items-center space-x-2 text-green-600">
-              <CheckCircleIcon className="w-4 h-4" />
-              <span className="text-sm">Delivered</span>
-            </div>
-          );
-        case "failed":
-          return (
-            <div className="flex items-center space-x-2 text-red-500">
-              <ExclamationCircleIcon className="w-4 h-4" />
-              <span className="text-sm">Failed</span>
-            </div>
-          );
-        default:
-          return null;
-      }
-    }, [lastMessageStatus]);
-
-    const isInputDisabled = disabled || isDisabled || isSending;
-    const canSend = (message.trim() || attachment) && !isInputDisabled;
-
-    return (
-      <div
-        className={`
-        border-t border-gray-200 bg-gradient-to-r from-white via-gray-50 to-white backdrop-blur-sm p-6 
-        transition-all duration-300 
-        ${isDragActive ? "bg-gradient-to-r from-gray-50 via-gray-100 to-gray-50 border-gray-300" : ""}
-      `}
-        onDragOver={handleDragOver}
-        onDragEnter={handleDragEnter}
-        onDragLeave={handleDragLeave}
-        onDrop={handleAttachmentDrop}>
-        {/* Drag and Drop Overlay */}
-        {isDragActive && (
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-blue-600/10 to-blue-700/10 backdrop-blur-sm flex items-center justify-center z-20 animate-fade-in-scale">
-            <div className="bg-white/90 backdrop-blur-md p-8 rounded-3xl text-center animate-bounce shadow-xl">
-              <CloudUploadIcon className="w-16 h-16 text-blue-600 mx-auto mb-4" />
-              <p className="text-lg font-semibold text-gray-700">
-                Drop your file here
-              </p>
-              <p className="text-sm text-gray-600">
-                Images, videos, audio, documents (max 25MB)
-              </p>
-            </div>
+  return (
+    <div className="border-t border-gray-200 bg-white">
+      {/* **PERFORMANCE**: Optimistic messages display */}
+      {optimisticMessages.length > 0 && (
+        <div className="px-4 py-2 bg-blue-50 border-b border-blue-100">
+          <div className="text-sm text-blue-600 font-medium mb-2">
+            Sending messages...
           </div>
-        )}
-
-        {/* Error Display */}
-        {sendError && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-2xl animate-fade-in-scale">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <ExclamationCircleIcon className="w-5 h-5 text-red-500" />
-                <p className="text-sm text-red-700 font-medium">{sendError}</p>
+          <div className="space-y-1">
+            {optimisticMessages.map((msg) => (
+              <div
+                key={msg.id}
+                className={classNames(
+                  "flex items-center text-sm transition-all duration-200",
+                  msg.status === "sending" ? "text-blue-600" : null,
+                  msg.status === "sent" ? "text-green-600" : null,
+                  msg.status === "failed" ? "text-red-600" : null,
+                )}>
+                <div
+                  className={classNames(
+                    "w-2 h-2 rounded-full mr-2 transition-all duration-200",
+                    msg.status === "sending"
+                      ? "bg-blue-500 animate-pulse"
+                      : null,
+                    msg.status === "sent" ? "bg-green-500" : null,
+                    msg.status === "failed" ? "bg-red-500" : null,
+                  )}
+                />
+                <span className="truncate flex-1">
+                  {msg.content.length > 50
+                    ? msg.content.slice(0, 50) + "..."
+                    : msg.content}
+                </span>
+                <span className="text-xs text-gray-500 ml-2">
+                  {msg.status === "sending" && "Sending..."}
+                  {msg.status === "sent" && "Sent"}
+                  {msg.status === "failed" && "Failed"}
+                </span>
               </div>
-              <div className="flex items-center space-x-2">
-                {lastMessageRef.current && (
-                  <button
-                    onClick={handleRetry}
-                    className="text-sm text-red-600 hover:text-red-700 font-medium transition-colors">
-                    Retry
-                  </button>
-                )}
-                <button
-                  onClick={() => setSendError(null)}
-                  className="text-red-400 hover:text-red-600 transition-colors">
-                  <XIcon className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
+            ))}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Attachment Preview */}
-        {attachment && (
-          <div className="mb-6 p-6 bg-white/80 backdrop-blur-sm rounded-3xl animate-fade-in-scale shadow-md hover:shadow-lg transition-all duration-300">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="p-3 bg-gradient-to-r from-blue-100 to-blue-200 rounded-2xl">
-                  <PaperClipIcon className="w-6 h-6 text-blue-600" />
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-900 text-lg">
-                    {attachment.filename}
-                  </p>
-                  <p className="text-sm text-gray-600 font-medium">
-                    Ready to send
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setAttachment?.(undefined);
-                  setAttachmentPreview?.(undefined);
-                }}
-                className="p-3 hover:bg-red-50 rounded-2xl transition-all duration-200 group transform hover:scale-105"
-                disabled={isSending}>
-                <XIcon className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors" />
-              </button>
-            </div>
-            {attachmentPreview && (
-              <div className="mt-4">
+      {/* **PERFORMANCE**: File attachment preview */}
+      {attachment && attachmentPreview && (
+        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              {attachment.mimeType?.startsWith("image/") ? (
                 <img
                   src={attachmentPreview}
                   alt="Preview"
-                  className="max-w-xs rounded-2xl shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105"
+                  className="w-12 h-12 rounded object-cover"
                 />
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Message Input Container */}
-        <div
-          className={`
-          bg-white/80 backdrop-blur-sm rounded-3xl border-2 transition-all duration-300 shadow-md hover:shadow-lg
-          ${
-            isFocused && !isInputDisabled
-              ? "border-blue-400 shadow-lg scale-[1.02]"
-              : "border-gray-200 hover:border-gray-300"
-          }
-          ${isInputDisabled ? "opacity-60" : ""}
-        `}>
-          <div className="flex items-end space-x-4 p-6">
-            {/* Text Input */}
-            <div className="flex-1 relative">
-              <textarea
-                ref={textareaRef}
-                value={message}
-                onChange={handleMessageChange}
-                onKeyPress={handleKeyPress}
-                onFocus={() => setIsFocused(true)}
-                onBlur={() => setIsFocused(false)}
-                placeholder={isSending ? "Sending..." : placeholder}
-                disabled={isInputDisabled}
-                rows={1}
-                className={`
-                w-full resize-none bg-transparent border-0 outline-none placeholder-gray-400 text-gray-900 font-medium leading-relaxed text-lg transition-all duration-200
-                ${isInputDisabled ? "cursor-not-allowed" : ""}
-              `}
-                style={{
-                  minHeight: "28px",
-                  maxHeight: "120px",
-                  transition: "height 0.2s ease",
-                }}
-              />
-
-              {/* Character Count */}
-              {characterCount > 0 && (
-                <div
-                  className={`
-                absolute bottom-0 right-0 text-xs font-medium transition-colors
-                ${characterCount > maxLength * 0.8 ? "text-orange-500" : "text-gray-400"}
-                ${characterCount > maxLength * 0.9 ? "text-red-500" : ""}
-              `}>
-                  {characterCount}/{maxLength}
+              ) : (
+                <div className="w-12 h-12 bg-gray-200 rounded flex items-center justify-center">
+                  <svg
+                    className="w-6 h-6 text-gray-500"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
+                  </svg>
                 </div>
               )}
-
-              {/* Focus indicator */}
-              <div
-                className={`absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-300 to-blue-500 transition-all duration-300 ${
-                  isFocused ? "opacity-100 scale-x-100" : "opacity-0 scale-x-0"
-                }`}
-              />
+              <div>
+                <p className="text-sm font-medium text-gray-900">
+                  {attachment.filename}
+                </p>
+                <p className="text-xs text-gray-500">{attachment.mimeType}</p>
+              </div>
             </div>
-
-            {/* Emoji Button */}
             <button
-              type="button"
-              disabled={isInputDisabled}
-              className="p-3 text-gray-400 hover:text-gray-700 rounded-2xl hover:bg-gray-100 transition-all duration-200 disabled:opacity-50 transform hover:scale-105 group"
-              title="Add emoji">
-              <EmojiHappyIcon className="w-6 h-6 transition-transform duration-200 group-hover:scale-110" />
-            </button>
-
-            {/* Attachment Button */}
-            <button
-              type="button"
-              disabled={isInputDisabled}
-              className="p-3 text-gray-400 hover:text-gray-700 rounded-2xl hover:bg-gray-100 transition-all duration-200 disabled:opacity-50 transform hover:scale-105 group"
-              title="Attach file">
-              <PaperClipIcon className="w-6 h-6 transition-transform duration-200 group-hover:rotate-12" />
-            </button>
-
-            {/* Send Button */}
-            <button
-              type="button"
-              disabled={!canSend}
-              onClick={handleSend}
-              className={`
-              p-4 rounded-2xl font-semibold transition-all duration-300 flex items-center justify-center relative overflow-hidden group min-w-[56px]
-              ${
-                canSend
-                  ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md hover:shadow-lg hover:scale-105"
-                  : "bg-gray-100 text-gray-400 cursor-not-allowed"
-              }
-              ${isSending ? "animate-pulse" : ""}
-            `}
-              title={isSending ? "Sending..." : "Send message"}>
-              {/* Animated background overlay */}
-              {canSend && (
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 -skew-x-12" />
-              )}
-
-              {isSending ? (
-                <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <PaperAirplaneIcon className="w-6 h-6 transform rotate-90 transition-transform duration-200 group-hover:translate-x-1 relative z-10" />
-              )}
+              onClick={removeAttachment}
+              className="p-1 text-gray-400 hover:text-gray-600 transition-colors">
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
             </button>
           </div>
         </div>
+      )}
 
-        {/* Status and Information Bar */}
-        <div className="flex justify-between items-center mt-4 px-4">
-          <div className="flex items-center space-x-4">
-            {/* Peer Address */}
-            {peerAddress && (
-              <div className="flex items-center space-x-2 text-sm text-gray-500">
-                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                <span>
-                  Chatting with{" "}
-                  <span className="font-mono bg-gray-100 px-2 py-1 rounded-lg text-xs">
-                    {peerAddress.slice(0, 6)}...{peerAddress.slice(-4)}
-                  </span>
-                </span>
-              </div>
-            )}
+      {/* **PERFORMANCE**: Main input area */}
+      <div className="px-4 py-3">
+        <div className="flex items-end space-x-3">
+          {/* **PERFORMANCE**: File upload button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={disabled}
+            className={classNames(
+              "flex-shrink-0 p-2 rounded-lg transition-all duration-200",
+              disabled
+                ? "text-gray-300 cursor-not-allowed"
+                : "text-gray-500 hover:text-blue-500 hover:bg-blue-50",
+            )}>
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+              />
+            </svg>
+          </button>
 
-            {/* Typing Indicator */}
-            {isTyping && (
-              <div className="flex items-center space-x-2 text-sm text-blue-500">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-                  <div
-                    className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
-                    style={{ animationDelay: "0.1s" }}></div>
-                  <div
-                    className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
-                    style={{ animationDelay: "0.2s" }}></div>
-                </div>
-                <span>Typing...</span>
+          {/* **PERFORMANCE**: Message input with smooth animations */}
+          <div className="flex-1 relative">
+            <textarea
+              ref={textareaRef}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={placeholder}
+              disabled={disabled}
+              rows={1}
+              className={classNames(
+                "w-full resize-none border rounded-lg px-3 py-2 transition-all duration-200",
+                "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                "placeholder-gray-400 text-gray-900",
+                disabled
+                  ? "bg-gray-50 border-gray-200 cursor-not-allowed"
+                  : "bg-white border-gray-300 hover:border-gray-400",
+                rows > 1 ? "py-3" : null,
+              )}
+              style={{
+                minHeight: "40px",
+                maxHeight: "120px",
+                overflow: "auto",
+              }}
+            />
+
+            {/* **PERFORMANCE**: Character count (for long messages) */}
+            {message.length > 500 && (
+              <div className="absolute bottom-1 right-2 text-xs text-gray-400">
+                {message.length}/4000
               </div>
             )}
           </div>
 
-          <div className="flex items-center space-x-4">
-            {/* Message Status */}
-            {statusIndicator()}
+          {/* **PERFORMANCE**: Send button with loading state */}
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={!message.trim() || disabled || isSending}
+            className={classNames(
+              "flex-shrink-0 p-2 rounded-lg transition-all duration-200 transform",
+              !message.trim() || disabled || isSending
+                ? "text-gray-300 cursor-not-allowed scale-95"
+                : "text-white bg-blue-500 hover:bg-blue-600 hover:scale-105 active:scale-95 shadow-md hover:shadow-lg",
+            )}>
+            {isSending ? (
+              <svg
+                className="w-5 h-5 animate-spin"
+                fill="none"
+                viewBox="0 0 24 24">
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"></circle>
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            ) : (
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                />
+              </svg>
+            )}
+          </button>
+        </div>
 
-            {/* Keyboard Shortcut */}
-            <div className="text-sm text-gray-500 font-medium flex items-center space-x-2">
-              <kbd className="px-2 py-1 bg-gray-100 border border-gray-300 rounded-lg text-xs font-mono shadow-sm">
-                Enter
-              </kbd>
-              <span>to send</span>
-            </div>
-          </div>
+        {/* **PERFORMANCE**: Input hints */}
+        <div className="mt-2 text-xs text-gray-500">
+          Press Enter to send, Shift+Enter for new line
         </div>
       </div>
-    );
-  },
-);
 
-// Performance optimization: Display name for debugging
-MessageInput.displayName = "MessageInput";
-
-export { MessageInput };
-export default MessageInput;
+      {/* **PERFORMANCE**: Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={handleFileSelect}
+        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt"
+      />
+    </div>
+  );
+};

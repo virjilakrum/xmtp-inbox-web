@@ -2,6 +2,7 @@ import { PlusIcon } from "@heroicons/react/solid";
 import { useTranslation } from "react-i18next";
 import { classNames } from "../../../helpers";
 import { IconButton } from "../IconButton/IconButton";
+import { ThemeToggle } from "../ThemeToggle/ThemeToggle";
 import type { ActiveTab } from "../../../store/xmtp";
 import { useXmtpStore } from "../../../store/xmtp";
 
@@ -41,33 +42,44 @@ export const HeaderDropdown = ({
     <div
       data-modal-target="headerModalId"
       data-testid="conversation-list-header"
-      className="border-l border-r border-b border-gray-200 bg-gray-100 h-16 p-4 pt-5">
+      className="border-l border-r border-b border-gray-200 bg-gray-100 h-16 p-4 pt-5 dark:border-gray-600 dark:bg-gray-800 theme-transition">
       <div className="flex justify-between items-center">
-        {tabs.map(({ name, testId }) => (
-          <button
-            key={name}
-            data-testid={testId}
-            type="button"
-            className={classNames(
-              "text-lg mr-2 cursor-pointer",
-              activeTab === name ? "font-bold" : "",
-            )}
-            onClick={() => {
-              setActiveTab(name);
-              resetRecipient();
-              setConversationTopic("");
-            }}>
-            {t(`consent.${name}`)}
-          </button>
-        ))}
-        {recipientInput && (
-          <IconButton
-            onClick={() => onClick?.()}
-            label={<PlusIcon color="white" width="20" />}
-            testId="new-message-icon-cta"
-            srText={t("aria_labels.start_new_message") || ""}
-          />
-        )}
+        <div className="flex items-center space-x-4">
+          {tabs.map(({ name, testId }) => (
+            <button
+              key={name}
+              data-testid={testId}
+              type="button"
+              className={classNames(
+                "text-lg mr-2 cursor-pointer transition-colors duration-200",
+                activeTab === name
+                  ? "font-bold text-gray-900 dark:text-gray-100"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100",
+              )}
+              onClick={() => {
+                setActiveTab(name);
+                resetRecipient();
+                setConversationTopic("");
+              }}>
+              {t(`consent.${name}`)}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center space-x-3">
+          {/* Theme Toggle */}
+          <ThemeToggle size="sm" />
+
+          {/* New Message Button */}
+          {recipientInput && (
+            <IconButton
+              onClick={() => onClick?.()}
+              label={<PlusIcon color="white" width="20" />}
+              testId="new-message-icon-cta"
+              srText={t("aria_labels.start_new_message") || ""}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

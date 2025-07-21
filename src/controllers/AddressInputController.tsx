@@ -1,9 +1,11 @@
 import { useConversation, useConsent } from "../hooks/useV3Hooks";
 import { useXmtpStore } from "../store/xmtp";
 import { AddressInput } from "../component-library/components/AddressInput/AddressInput";
+import { useSelectedConversation } from "../hooks/useSelectedConversation";
 
 export const AddressInputController = () => {
-  const { conversation } = useConversation();
+  const { messages, isLoading, error } = useConversation();
+  const { conversation } = useSelectedConversation();
   const { consent } = useConsent();
   const recipientAddress = useXmtpStore((s) => s.recipientAddress);
   const setRecipientAddress = useXmtpStore((s) => s.setRecipientAddress);
@@ -20,7 +22,15 @@ export const AddressInputController = () => {
   };
 
   return (
-    <AddressInput value={recipientAddress} onChange={handleAddressChange} />
+    <AddressInput
+      value={recipientAddress}
+      onChange={handleAddressChange}
+      isLoading={isLoading}
+      isError={!!error}
+      subtext={
+        conversation ? `Connected to ${conversation.peerAddress}` : undefined
+      }
+    />
   );
 };
 

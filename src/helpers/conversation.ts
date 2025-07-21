@@ -8,18 +8,10 @@ import {
 } from "./string";
 import { chunkArray } from "./functions";
 import { getWagmiConfig } from "./config";
-
-// V3 conversation type
-type CachedConversation = {
-  peerAddress: string;
-  topic?: string;
-  conversationId?: string;
-  metadata?: {
-    peerAddressName?: string;
-    peerAddressAvatar?: string;
-  };
-  walletAddress?: string;
-};
+import {
+  CachedConversation,
+  CachedConversationWithId,
+} from "../types/xmtpV3Types";
 
 export type PeerAddressAvatar = string | null;
 export type PeerAddressName = string | null;
@@ -28,10 +20,28 @@ export type PeerAddressName = string | null;
  * Get the cached name of a conversation's peer address
  *
  * @param conversation The conversation
- * @returns The resolved name of the conversation's peer address
+ * @returns The cached name or null if not found
  */
-export const getCachedPeerAddressName = (conversation: CachedConversation) =>
-  conversation.metadata?.peerAddressName as PeerAddressName;
+export const getCachedPeerAddressName = (
+  conversation: CachedConversation,
+): PeerAddressName => {
+  try {
+    // For V3, check enhancedMetadata for custom nickname first
+    if (conversation.enhancedMetadata?.customizations?.nickname) {
+      return conversation.enhancedMetadata.customizations.nickname;
+    }
+
+    // Then check if we have a cached name in enhancedMetadata
+    if (conversation.enhancedMetadata?.title) {
+      return conversation.enhancedMetadata.title;
+    }
+
+    return null;
+  } catch (error) {
+    console.error("Error getting cached peer address name:", error);
+    return null;
+  }
+};
 
 /**
  * Fetch the resolved name of a conversation's peer address if it's not present
@@ -59,35 +69,24 @@ export const fetchPeerAddressName = async (
  *
  * @param name The name for the peer address
  * @param conversation The conversation
- * @param db V3 client (database managed automatically)
+ * @returns Promise<void>
  */
 export const setPeerAddressName = async (
   name: string | null,
   conversation: CachedConversation,
-  db: any, // V3 client
-) => {
-  // V3 conversation metadata storage using localStorage (simple approach)
-  // V3 client manages database automatically for messages, but metadata can be stored locally
+): Promise<void> => {
   try {
-    const metadataKey = `xmtp-v3-peer-name-${conversation.conversationId || conversation.peerAddress}`;
+    // V3 conversation metadata storage using localStorage (simple approach)
+    const metadataKey = `xmtp-v3-peer-name-${conversation.id || conversation.peerAddress}`;
     if (name) {
       localStorage.setItem(metadataKey, name);
-      // Update conversation metadata in memory
-      if (conversation.metadata) {
-        conversation.metadata.peerAddressName = name;
-      } else {
-        conversation.metadata = { peerAddressName: name };
-      }
+      console.log("V3 metadata: Stored peer address name", {
+        name,
+        conversationId: conversation.id,
+      });
     } else {
       localStorage.removeItem(metadataKey);
-      if (conversation.metadata) {
-        conversation.metadata.peerAddressName = undefined;
-      }
     }
-    console.log("V3 metadata: Stored peer address name", {
-      name,
-      conversation: conversation.conversationId || conversation.peerAddress,
-    });
   } catch (error) {
     console.error("V3 metadata: Error storing peer address name", error);
   }
@@ -97,10 +96,23 @@ export const setPeerAddressName = async (
  * Get the cached avatar of a conversation's peer address
  *
  * @param conversation The conversation
- * @returns The avatar of the conversation's peer address
+ * @returns The cached avatar URL or null if not found
  */
-export const getCachedPeerAddressAvatar = (conversation: CachedConversation) =>
-  conversation.metadata?.peerAddressAvatar as PeerAddressAvatar;
+export const getCachedPeerAddressAvatar = (
+  conversation: CachedConversation,
+): PeerAddressAvatar => {
+  try {
+    // For V3, check enhancedMetadata for avatarUrl
+    if (conversation.enhancedMetadata?.avatarUrl) {
+      return conversation.enhancedMetadata.avatarUrl;
+    }
+
+    return null;
+  } catch (error) {
+    console.error("Error getting cached peer address avatar:", error);
+    return null;
+  }
+};
 
 /**
  * Fetch the avatar of a conversation's peer address if it's not present
@@ -130,37 +142,119 @@ export const fetchPeerAddressAvatar = async (
  *
  * @param avatar The avatar for the peer address
  * @param conversation The conversation
- * @param db V3 client (database managed automatically)
+ * @returns Promise<void>
  */
 export const setPeerAddressAvatar = async (
   avatar: string | null,
   conversation: CachedConversation,
-  db: any, // V3 client
-) => {
-  // V3 conversation metadata storage using localStorage (simple approach)
-  // V3 client manages database automatically for messages, but metadata can be stored locally
+): Promise<void> => {
   try {
-    const metadataKey = `xmtp-v3-peer-avatar-${conversation.conversationId || conversation.peerAddress}`;
+    // V3 conversation metadata storage using localStorage (simple approach)
+    const metadataKey = `xmtp-v3-peer-avatar-${conversation.id || conversation.peerAddress}`;
     if (avatar) {
       localStorage.setItem(metadataKey, avatar);
-      // Update conversation metadata in memory
-      if (conversation.metadata) {
-        conversation.metadata.peerAddressAvatar = avatar;
-      } else {
-        conversation.metadata = { peerAddressAvatar: avatar };
-      }
+      console.log("V3 metadata: Stored peer address avatar", {
+        avatar,
+        conversationId: conversation.id,
+      });
     } else {
       localStorage.removeItem(metadataKey);
-      if (conversation.metadata) {
-        conversation.metadata.peerAddressAvatar = undefined;
-      }
     }
-    console.log("V3 metadata: Stored peer address avatar", {
-      avatar,
-      conversation: conversation.conversationId || conversation.peerAddress,
-    });
   } catch (error) {
     console.error("V3 metadata: Error storing peer address avatar", error);
+  }
+};
+
+/**
+ * Set the cached name of a conversation's peer address
+ *
+ * @param conversation The conversation to update
+ * @param name The name to cache
+ * @returns The updated conversation (for V3, this is handled differently)
+ */
+export const setCachedPeerAddressName = async (
+  conversation: CachedConversation,
+  name: string,
+): Promise<void> => {
+  try {
+    console.log("Setting cached peer address name for V3 conversation:", {
+      conversationId: conversation.id,
+      name,
+    });
+
+    // Real V3 implementation: Update conversation's enhanced metadata
+    // Store in localStorage for persistence across sessions
+    const metadataKey = `xmtp-v3-peer-name-${conversation.id}`;
+    localStorage.setItem(metadataKey, name);
+
+    // Update conversation metadata in memory
+    if (conversation.enhancedMetadata) {
+      conversation.enhancedMetadata.customizations = {
+        ...conversation.enhancedMetadata.customizations,
+        nickname: name,
+      };
+      conversation.enhancedMetadata.updatedAt = new Date();
+    }
+
+    // Dispatch custom event for real-time updates
+    const event = new CustomEvent("xmtp-conversation-metadata-updated", {
+      detail: {
+        conversationId: conversation.id,
+        type: "peerName",
+        value: name,
+      },
+    });
+    window.dispatchEvent(event);
+
+    console.log("Successfully updated peer address name:", name);
+  } catch (error) {
+    console.error("Error setting cached peer address name:", error);
+    throw error;
+  }
+};
+
+/**
+ * Set the cached avatar of a conversation's peer address
+ *
+ * @param conversation The conversation to update
+ * @param avatar The avatar URL to cache
+ * @returns The updated conversation (for V3, this is handled differently)
+ */
+export const setCachedPeerAddressAvatar = async (
+  conversation: CachedConversation,
+  avatar: string,
+): Promise<void> => {
+  try {
+    console.log("Setting cached peer address avatar for V3 conversation:", {
+      conversationId: conversation.id,
+      avatar,
+    });
+
+    // Real V3 implementation: Update conversation's enhanced metadata
+    // Store in localStorage for persistence across sessions
+    const metadataKey = `xmtp-v3-peer-avatar-${conversation.id}`;
+    localStorage.setItem(metadataKey, avatar);
+
+    // Update conversation metadata in memory
+    if (conversation.enhancedMetadata) {
+      conversation.enhancedMetadata.avatarUrl = avatar;
+      conversation.enhancedMetadata.updatedAt = new Date();
+    }
+
+    // Dispatch custom event for real-time updates
+    const event = new CustomEvent("xmtp-conversation-metadata-updated", {
+      detail: {
+        conversationId: conversation.id,
+        type: "peerAvatar",
+        value: avatar,
+      },
+    });
+    window.dispatchEvent(event);
+
+    console.log("Successfully updated peer address avatar:", avatar);
+  } catch (error) {
+    console.error("Error setting cached peer address avatar:", error);
+    throw error;
   }
 };
 
@@ -170,15 +264,14 @@ export const setPeerAddressAvatar = async (
  */
 export const updateConversationIdentity = async (
   conversation: CachedConversation,
-  db: any, // V3 client
 ) => {
   const name = await fetchPeerAddressName(conversation);
   if (name) {
-    await setPeerAddressName(name, conversation, db);
+    await setPeerAddressName(name, conversation);
 
     const avatar = await fetchPeerAddressAvatar(conversation);
     if (avatar) {
-      await setPeerAddressAvatar(avatar, conversation, db);
+      await setPeerAddressAvatar(avatar, conversation);
     }
   }
 };
@@ -189,7 +282,6 @@ export const updateConversationIdentity = async (
  */
 export const updateConversationIdentities = async (
   conversations: CachedConversation[],
-  db: any, // V3 client
 ) => {
   // key the conversations by peer address for easy lookup
   const conversationsWithoutNameMap = conversations.reduce(
@@ -220,7 +312,7 @@ export const updateConversationIdentities = async (
       ([address, name]) => {
         const addressConversations = conversationsWithoutNameMap[address];
         addressConversations.forEach((convo) => {
-          void setPeerAddressName(name, convo, db);
+          void setPeerAddressName(name, convo);
         });
       },
     );
@@ -247,7 +339,7 @@ export const updateConversationIdentities = async (
           if (name) {
             const addressConversations = conversationsWithoutNameMap[address];
             addressConversations.forEach((convo) => {
-              void setPeerAddressName(name, convo, db);
+              void setPeerAddressName(name, convo);
             });
           }
         }),

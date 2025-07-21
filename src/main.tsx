@@ -8,6 +8,7 @@ import AppController from "./controllers/AppController";
 import { ToastProvider } from "./component-library/components/Toast/Toast";
 import { ErrorBoundary } from "./component-library/components/ErrorBoundary/ErrorBoundary";
 import { XmtpV3Provider } from "./context/XmtpV3Provider";
+import { ThemeProvider } from "./context/ThemeProvider";
 import { getWagmiConfig } from "./helpers/config";
 import "./globals.css";
 
@@ -27,17 +28,19 @@ root.render(
       }}
       maxRetries={3}
       resetOnPropsChange={true}>
-      <WagmiProvider config={config}>
-        <QueryClientProvider client={queryClient}>
-          <RainbowKitProvider>
-            <XmtpV3Provider>
-              <ToastProvider position="top-right" maxToasts={5}>
-                <AppController />
-              </ToastProvider>
-            </XmtpV3Provider>
-          </RainbowKitProvider>
-        </QueryClientProvider>
-      </WagmiProvider>
+      <ThemeProvider>
+        <WagmiProvider config={config}>
+          <QueryClientProvider client={queryClient}>
+            <RainbowKitProvider>
+              <XmtpV3Provider>
+                <ToastProvider position="top-right" maxToasts={5}>
+                  <AppController />
+                </ToastProvider>
+              </XmtpV3Provider>
+            </RainbowKitProvider>
+          </QueryClientProvider>
+        </WagmiProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   </React.StrictMode>,
 );

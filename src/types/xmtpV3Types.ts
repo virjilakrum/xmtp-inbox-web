@@ -164,6 +164,9 @@ export interface CachedConversationWithId extends Conversation {
   };
 }
 
+// **COMPATIBILITY**: Type alias for backward compatibility
+export type CachedConversation = CachedConversationWithId;
+
 // Enhanced message with metadata
 export interface CachedMessageWithId extends CachedMessage {
   id: string;

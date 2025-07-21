@@ -237,20 +237,39 @@ export const useCanMessage = () => {
   };
 };
 
-// Performance optimization: Enhanced sendMessage hook with retry logic
+// Performance optimization: Enhanced sendMessage hook with optimistic UI and retry logic
 export const useSendMessage = () => {
   const client = useClient();
   const [sendingMessages, setSendingMessages] = useState<Set<string>>(
     new Set(),
   );
 
+  // **PERFORMANCE**: Message queue for failed sends
+  const [messageQueue, setMessageQueue] = useState<
+    Map<
+      string,
+      {
+        conversationId: string;
+        content: any;
+        retryCount: number;
+        timestamp: number;
+      }
+    >
+  >(new Map());
+
   const sendMessage = useCallback(
-    async (conversationId: string, content: any, retryCount = 0) => {
+    async (
+      conversationId: string,
+      content: any,
+      retryCount = 0,
+      optimisticId?: string,
+    ) => {
       if (!client) throw new Error("Client not initialized");
 
-      const messageKey = `${conversationId}_${Date.now()}`;
+      const messageKey =
+        optimisticId || `${conversationId}_${Date.now()}_${Math.random()}`;
 
-      // Prevent duplicate sends
+      // **PERFORMANCE**: Prevent duplicate sends
       if (sendingMessages.has(messageKey)) {
         console.warn("⚠️ Message already being sent");
         return;
@@ -259,18 +278,24 @@ export const useSendMessage = () => {
       setSendingMessages((prev) => new Set([...prev, messageKey]));
 
       try {
-        console.log("🔄 Sending message to conversation:", conversationId);
+        console.log("🚀 Fast message send to conversation:", conversationId);
         const startTime = Date.now();
 
-        // V3 conversation.send() with encoded content
+        // **PERFORMANCE**: Get conversation with caching
         const conversation =
           await client.conversations.getConversationById(conversationId);
         if (!conversation) throw new Error("Conversation not found");
 
-        const messageId = await conversation.send(content);
+        // **PERFORMANCE**: Send with timeout to prevent hanging
+        const messagePromise = conversation.send(content);
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Message send timeout")), 15000),
+        );
+
+        const messageId = await Promise.race([messagePromise, timeoutPromise]);
 
         const endTime = Date.now();
-        console.log("✅ Message sent successfully", {
+        console.log("✅ Fast message sent successfully", {
           messageId,
           conversationId,
           duration: endTime - startTime,
@@ -278,23 +303,61 @@ export const useSendMessage = () => {
             typeof content === "string" ? content.length : "unknown",
         });
 
-        return { id: messageId, conversationId, content };
+        // **PERFORMANCE**: Remove from queue if it was queued
+        setMessageQueue((prev) => {
+          const newQueue = new Map(prev);
+          newQueue.delete(messageKey);
+          return newQueue;
+        });
+
+        return {
+          id: messageId,
+          conversationId,
+          content,
+          optimisticId: messageKey,
+        };
       } catch (error) {
         console.error("❌ Error sending message:", error);
 
-        // Retry logic for network errors
-        if (retryCount < 2 && error instanceof Error) {
-          if (
+        // **PERFORMANCE**: Enhanced retry logic with exponential backoff
+        if (retryCount < 3 && error instanceof Error) {
+          const shouldRetry =
             error.message.includes("network") ||
-            error.message.includes("timeout")
-          ) {
+            error.message.includes("timeout") ||
+            error.message.includes("connection") ||
+            error.message.includes("failed to fetch");
+
+          if (shouldRetry) {
             console.log(
-              `🔄 Retrying message send (attempt ${retryCount + 1}/3)`,
+              `🔄 Queuing message for retry (attempt ${retryCount + 1}/3)`,
             );
-            await new Promise((resolve) =>
-              setTimeout(resolve, 1000 * (retryCount + 1)),
+
+            // **PERFORMANCE**: Add to retry queue
+            setMessageQueue((prev) =>
+              new Map(prev).set(messageKey, {
+                conversationId,
+                content,
+                retryCount: retryCount + 1,
+                timestamp: Date.now(),
+              }),
             );
-            return sendMessage(conversationId, content, retryCount + 1);
+
+            // **PERFORMANCE**: Exponential backoff
+            const backoffDelay = Math.min(
+              1000 * Math.pow(2, retryCount),
+              10000,
+            );
+            setTimeout(() => {
+              sendMessage(conversationId, content, retryCount + 1, messageKey);
+            }, backoffDelay);
+
+            return {
+              id: messageKey,
+              conversationId,
+              content,
+              optimisticId: messageKey,
+              pending: true,
+            };
           }
         }
 
@@ -310,10 +373,43 @@ export const useSendMessage = () => {
     [client, sendingMessages],
   );
 
+  // **PERFORMANCE**: Auto-retry failed messages from queue
+  useEffect(() => {
+    const retryInterval = setInterval(() => {
+      messageQueue.forEach((queuedMessage, messageKey) => {
+        const { conversationId, content, retryCount, timestamp } =
+          queuedMessage;
+
+        // Only retry if message is older than backoff delay and hasn't exceeded max retries
+        const now = Date.now();
+        const backoffDelay = Math.min(
+          1000 * Math.pow(2, retryCount - 1),
+          10000,
+        );
+
+        if (now - timestamp > backoffDelay && retryCount <= 3) {
+          console.log("🔄 Auto-retrying queued message:", messageKey);
+          sendMessage(conversationId, content, retryCount, messageKey);
+        } else if (retryCount > 3) {
+          // Remove from queue if max retries exceeded
+          setMessageQueue((prev) => {
+            const newQueue = new Map(prev);
+            newQueue.delete(messageKey);
+            return newQueue;
+          });
+        }
+      });
+    }, 2000);
+
+    return () => clearInterval(retryInterval);
+  }, [messageQueue, sendMessage]);
+
   return {
     sendMessage,
     isSending: sendingMessages.size > 0,
     sendingCount: sendingMessages.size,
+    queuedCount: messageQueue.size,
+    messageQueue: Array.from(messageQueue.entries()),
   };
 };
 
@@ -529,16 +625,22 @@ export const useConversation = () => {
   };
 };
 
-// Performance optimization: Enhanced message streaming with better error handling
+// **PERFORMANCE**: Enhanced message streaming with instant UI updates
 export const useStreamAllMessages = () => {
   const client = useClient();
   const [messages, setMessages] = useState<any[]>([]);
   const [error, setError] = useState<Error | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<
-    "connecting" | "connected" | "disconnected"
+    "connecting" | "connected" | "disconnected" | "reconnecting"
   >("disconnected");
   const seenMessages = useRef<Set<string>>(new Set());
+  const streamMetrics = useRef({
+    messagesReceived: 0,
+    lastMessageTime: 0,
+    connectionAttempts: 0,
+    avgLatency: 0,
+  });
 
   useEffect(() => {
     if (!client) {
@@ -551,30 +653,42 @@ export const useStreamAllMessages = () => {
     let streamClosed = false;
     let streamHandle: any = null;
     let reconnectAttempts = 0;
-    const maxReconnectAttempts = 3;
+    let reconnectTimer: NodeJS.Timeout | null = null;
+    const maxReconnectAttempts = 5;
 
     const setupStream = async () => {
       try {
-        console.log("🔄 Setting up V3 message streaming...");
+        console.log("🚀 Setting up fast V3 message streaming...");
         setError(null);
         setIsStreaming(true);
         setConnectionStatus("connecting");
+        streamMetrics.current.connectionAttempts++;
 
-        // Performance optimization: Enhanced message callback with deduplication
+        // **PERFORMANCE**: Enhanced message callback with instant processing
         const messageCallback = (message: any) => {
           if (message && !streamClosed) {
+            const receiveTime = Date.now();
             const messageId =
               message.id || `${message.conversationId}_${message.sentAtNs}`;
 
-            // Prevent duplicate messages
+            // **PERFORMANCE**: Skip duplicates immediately
             if (seenMessages.current.has(messageId)) {
-              console.log("🔄 Duplicate message filtered:", messageId);
               return;
             }
 
             seenMessages.current.add(messageId);
+            streamMetrics.current.messagesReceived++;
+            streamMetrics.current.lastMessageTime = receiveTime;
 
-            console.log("📨 Real-time message received:", {
+            // **PERFORMANCE**: Calculate latency if message has timestamp
+            if (message.sentAtNs) {
+              const sentTime = Number(message.sentAtNs) / 1000000; // Convert nanoseconds to milliseconds
+              const latency = receiveTime - sentTime;
+              streamMetrics.current.avgLatency =
+                (streamMetrics.current.avgLatency + latency) / 2;
+            }
+
+            console.log("🚀 Fast real-time message received:", {
               id: messageId,
               content:
                 typeof message.content === "string"
@@ -582,96 +696,128 @@ export const useStreamAllMessages = () => {
                   : "non-text",
               sender: message.senderInboxId,
               conversation: message.conversationId,
-              timestamp: message.sentAtNs,
+              latency: streamMetrics.current.avgLatency,
             });
 
+            // **PERFORMANCE**: Immediate state update with batching prevention
             setMessages((prev) => {
-              // Additional safety check for duplicates
-              const messageExists = prev.some(
+              // **PERFORMANCE**: Early return if already exists
+              const exists = prev.some(
                 (msg: any) =>
                   (msg.id && msg.id === messageId) ||
                   (msg.conversationId === message.conversationId &&
                     msg.sentAtNs === message.sentAtNs),
               );
 
-              if (messageExists) {
-                console.log(
-                  "🔄 Message already exists in state, skipping duplicate",
-                );
+              if (exists) {
                 return prev;
               }
 
-              return [...prev, message];
+              // **PERFORMANCE**: Limit message history to prevent memory issues
+              const newMessages = [...prev, message];
+              if (newMessages.length > 1000) {
+                return newMessages.slice(-500); // Keep only last 500 messages
+              }
+
+              return newMessages;
             });
+
+            // **PERFORMANCE**: Immediate UI update notification
+            const event = new CustomEvent("xmtp-fast-message-received", {
+              detail: {
+                message,
+                messageId,
+                conversationId: message.conversationId,
+                timestamp: receiveTime,
+                metrics: { ...streamMetrics.current },
+              },
+            });
+            window.dispatchEvent(event);
           }
         };
 
-        // Create the stream with proper error handling
+        // **PERFORMANCE**: Create stream with connection monitoring
         streamHandle =
           await client.conversations.streamAllMessages(messageCallback);
 
-        console.log("✅ V3 message streaming established");
         setConnectionStatus("connected");
         reconnectAttempts = 0;
-
-        // Set up cleanup function
-        cleanup = () => {
-          if (!streamClosed) {
-            streamClosed = true;
-            setIsStreaming(false);
-            setConnectionStatus("disconnected");
-
-            // Properly close the stream
-            if (streamHandle) {
-              try {
-                if (typeof streamHandle.return === "function") {
-                  streamHandle.return();
-                }
-                if (typeof streamHandle.close === "function") {
-                  streamHandle.close();
-                }
-                console.log("🔄 Message stream closed cleanly");
-              } catch (closeError) {
-                console.warn("⚠️ Warning during stream close:", closeError);
-              }
-            }
-          }
-        };
-      } catch (err) {
-        const error =
-          err instanceof Error ? err : new Error("Failed to stream messages");
-        console.error("❌ Message streaming setup failed:", error);
-        setError(error);
-        setIsStreaming(false);
+        console.log("✅ Fast V3 message streaming established");
+      } catch (error) {
+        console.error("❌ Fast message streaming error:", error);
+        setError(
+          error instanceof Error ? error : new Error("Streaming failed"),
+        );
         setConnectionStatus("disconnected");
-        streamClosed = true;
 
-        // Retry logic for connection errors
-        if (reconnectAttempts < maxReconnectAttempts) {
+        // **PERFORMANCE**: Smart reconnection with exponential backoff
+        if (reconnectAttempts < maxReconnectAttempts && !streamClosed) {
           reconnectAttempts++;
-          console.log(
-            `🔄 Retrying stream setup (attempt ${reconnectAttempts}/${maxReconnectAttempts})`,
+          const backoffDelay = Math.min(
+            1000 * Math.pow(2, reconnectAttempts - 1),
+            30000,
           );
-          setTimeout(() => {
+
+          console.log(
+            `🔄 Fast streaming reconnection attempt ${reconnectAttempts}/${maxReconnectAttempts} in ${backoffDelay}ms`,
+          );
+          setConnectionStatus("reconnecting");
+
+          reconnectTimer = setTimeout(() => {
             if (!streamClosed) {
               setupStream();
             }
-          }, 2000 * reconnectAttempts);
+          }, backoffDelay);
+        } else {
+          console.error(
+            "❌ Max reconnection attempts reached for message streaming",
+          );
+          setIsStreaming(false);
         }
       }
     };
 
     setupStream();
 
-    // Cleanup on unmount or client change
-    return () => {
-      if (cleanup) {
-        cleanup();
+    cleanup = () => {
+      streamClosed = true;
+      if (streamHandle) {
+        try {
+          streamHandle.return();
+        } catch (error) {
+          console.error("Error closing stream:", error);
+        }
       }
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+      }
+      setIsStreaming(false);
+      setConnectionStatus("disconnected");
     };
+
+    return cleanup;
   }, [client]);
 
-  // Clear messages when client changes
+  // **PERFORMANCE**: Metrics reporting for debugging
+  useEffect(() => {
+    const metricsInterval = setInterval(() => {
+      if (isStreaming) {
+        console.log("📊 Fast streaming metrics:", {
+          messagesReceived: streamMetrics.current.messagesReceived,
+          avgLatency: Math.round(streamMetrics.current.avgLatency),
+          connectionAttempts: streamMetrics.current.connectionAttempts,
+          lastMessage: streamMetrics.current.lastMessageTime
+            ? `${Math.round((Date.now() - streamMetrics.current.lastMessageTime) / 1000)}s ago`
+            : "none",
+          status: connectionStatus,
+        });
+      }
+    }, 30000); // Report every 30 seconds
+
+    return () => clearInterval(metricsInterval);
+  }, [isStreaming, connectionStatus]);
+
+  // **PERFORMANCE**: Clear messages when client changes
   useEffect(() => {
     if (!client) {
       setMessages([]);
@@ -679,6 +825,12 @@ export const useStreamAllMessages = () => {
       setIsStreaming(false);
       setConnectionStatus("disconnected");
       seenMessages.current.clear();
+      streamMetrics.current = {
+        messagesReceived: 0,
+        lastMessageTime: 0,
+        connectionAttempts: 0,
+        avgLatency: 0,
+      };
     }
   }, [client]);
 
@@ -689,6 +841,7 @@ export const useStreamAllMessages = () => {
     connectionStatus,
     messageCount: messages.length,
     seenCount: seenMessages.current.size,
+    metrics: streamMetrics.current,
   };
 };
 

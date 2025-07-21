@@ -3,44 +3,75 @@ import type {
   CachedConversation,
   CachedMessage,
   CachedMessageWithId,
+  ConversationMetadata,
 } from "../types/xmtpV3Types";
 
 export const getMockConversation = (
   values?: Partial<CachedConversation>,
 ): CachedConversation => ({
+  // Required fields from CachedConversationWithId
   id: window.crypto.randomUUID(),
-  conversation: {} as any, // Mock conversation object
-  peerAddress: "",
-  topic: "",
-  conversationId: "",
-  metadata: {},
-  walletAddress: values?.walletAddress ?? "",
-  ...values,
+  peerAddress:
+    values?.peerAddress || "0x1234567890123456789012345678901234567890",
+  peerInboxId: values?.peerInboxId || "mock-inbox-id",
+  topic: values?.topic || "mock-topic",
+  createdAtNs: BigInt(Date.now() * 1000000),
+  enhancedMetadata: {
+    id: window.crypto.randomUUID(),
+    title: values?.enhancedMetadata?.title,
+    description: values?.enhancedMetadata?.description,
+    avatarUrl: values?.enhancedMetadata?.avatarUrl,
+    isPinned: false,
+    isArchived: false,
+    isMuted: false,
+    customizations: {},
+    tags: [],
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  } as ConversationMetadata,
+  unreadCount: 0,
+  participantPresence: {},
+  permissions: {
+    canAddMembers: false,
+    canRemoveMembers: false,
+    canEditInfo: false,
+    canDeleteMessages: false,
+    canPin: false,
+  },
+  isGroup: false,
+
+  // Conversation base properties (from @xmtp/browser-sdk)
+  // These would be filled by the actual Conversation object
+  ...(values as any),
 });
 
 export const getMockMessage = (
   id: number,
   content?: string,
 ): CachedMessageWithId => ({
+  // Required fields from CachedMessageWithId
   id: id.toString(),
-  message: {
-    id: window.crypto.randomUUID(),
-    content: content || "Mock message content",
-    contentType: {
-      authorityId: "xmtp.org",
-      typeId: "text",
-      versionMajor: 1,
-      versionMinor: 0,
-    },
-    conversationId: "",
-    deliveryStatus: "published",
-    fallback: "",
-    compression: 0,
-    kind: "application",
-    parameters: new Map(),
-    encodedContent: {} as any,
-    senderInboxId: "",
-    sentAtNs: BigInt(Date.now() * 1000000),
-  } as any, // Mock DecodedMessage
-  conversation: {} as any, // Mock Conversation
+  conversationId: "mock-conversation-id",
+  content: {
+    text: content || "Mock message content",
+  },
+  senderAddress: "0x1234567890123456789012345678901234567890",
+  senderInboxId: "mock-sender-inbox-id",
+  sentAtNs: BigInt(Date.now() * 1000000),
+  metadata: {
+    id: id.toString(),
+    deliveryStatus: "sent" as const,
+    isEdited: false,
+    reactions: {},
+    mentions: [],
+    links: [],
+    attachments: [],
+    isEncrypted: false,
+    encryptionLevel: "transport" as const,
+  },
+  localMetadata: {
+    isSelected: false,
+    isHighlighted: false,
+    searchScore: 0,
+  },
 });
