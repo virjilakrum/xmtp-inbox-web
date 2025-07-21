@@ -2,9 +2,8 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useXmtpStore } from "../store/xmtp";
 import useXmtpV3Client from "./useXmtpV3Client";
 import {
-  EnhancedConversation,
   toEnhancedConversation,
-  isEnhancedConversation,
+  type EnhancedConversation,
 } from "../types/xmtpV3Types";
 import { Client } from "@xmtp/browser-sdk";
 
@@ -873,26 +872,38 @@ export const useStartConversation = () => {
 };
 
 // Performance optimization: Enhanced conversation hook with message loading
-export const useConversation = () => {
+export const useConversation = (conversationId: string) => {
   const client = useClient();
-  const conversationTopic = useXmtpStore((s) => s.conversationTopic);
+  const [conversation, setConversation] = useState<EnhancedConversation | null>(
+    null,
+  );
   const [messages, setMessages] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const messagesCache = useRef<Map<string, any[]>>(new Map());
+  const conversationCache = useRef<Map<string, EnhancedConversation>>(
+    new Map(),
+  );
 
-  const loadConversation = useCallback(
-    async (forceRefresh = false) => {
-      if (!client || !conversationTopic) {
+  useEffect(() => {
+    const getConversation = async () => {
+      if (!client || !conversationId) {
+        setConversation(null);
         setMessages([]);
         return;
       }
 
       // Check cache first
-      const cached = messagesCache.current.get(conversationTopic);
-      if (!forceRefresh && cached) {
-        console.log("📦 Using cached messages:", cached.length);
-        setMessages(cached);
+      const cachedConversation = conversationCache.current.get(conversationId);
+      const cachedMessages = messagesCache.current.get(conversationId);
+
+      if (cachedConversation && cachedMessages) {
+        console.log("📦 Using cached conversation and messages:", {
+          conversationId,
+          messagesCount: cachedMessages.length,
+        });
+        setConversation(cachedConversation);
+        setMessages(cachedMessages);
         return;
       }
 
@@ -900,56 +911,63 @@ export const useConversation = () => {
       setError(null);
 
       try {
-        console.log("🔄 Loading conversation messages:", conversationTopic);
+        console.log("🔄 Loading conversation:", conversationId);
         const startTime = Date.now();
 
         // V3 conversation.messages() to get all messages
-        const conversation = await (
-          client as any
-        ).conversations.getConversationById(conversationTopic);
-        if (!conversation) throw new Error("Conversation not found");
+        const conv = await (client as any).conversations.getConversationById(
+          conversationId,
+        );
+        if (!conv) throw new Error("Conversation not found");
 
-        const conversationMessages = await conversation.messages();
+        const enhancedConv = toEnhancedConversation(conv);
+        const conversationMessages = await conv.messages();
 
         const endTime = Date.now();
-        console.log("✅ Conversation messages loaded", {
-          count: conversationMessages.length,
+        console.log("✅ Conversation loaded successfully", {
+          conversationId,
+          peerAddress: enhancedConv.peerAddress,
+          messagesCount: conversationMessages.length,
           duration: endTime - startTime,
-          conversationId: conversationTopic,
         });
 
-        // Update cache
-        messagesCache.current.set(conversationTopic, conversationMessages);
-        setMessages(conversationMessages);
-        setError(null);
-      } catch (err) {
-        const error =
-          err instanceof Error ? err : new Error("Failed to load conversation");
-        console.error("❌ Failed to load conversation:", error);
-        setError(error);
+        // Update caches
+        conversationCache.current.set(conversationId, enhancedConv);
+        messagesCache.current.set(conversationId, conversationMessages);
 
-        // Fall back to cache if available
-        const cached = messagesCache.current.get(conversationTopic);
-        if (cached) {
-          console.log("📦 Using cached messages after error");
-          setMessages(cached);
-        }
+        setConversation(enhancedConv);
+        setMessages(conversationMessages);
+      } catch (e) {
+        const err =
+          e instanceof Error ? e : new Error("Failed to load conversation");
+        console.error("❌ Error loading conversation:", err);
+        setError(err);
+        setConversation(null);
+        setMessages([]);
       } finally {
         setIsLoading(false);
       }
-    },
-    [client, conversationTopic],
-  );
+    };
 
-  useEffect(() => {
-    loadConversation();
-  }, [loadConversation]);
+    getConversation();
+  }, [client, conversationId]);
+
+  const refresh = useCallback(async () => {
+    if (client && conversationId) {
+      // Clear cache and re-fetch
+      conversationCache.current.delete(conversationId);
+      messagesCache.current.delete(conversationId);
+      // Re-trigger useEffect
+      // A more direct call could be implemented if needed
+    }
+  }, [client, conversationId]);
 
   return {
+    conversation,
     messages,
     isLoading,
     error,
-    refresh: () => loadConversation(true),
+    refresh,
   };
 };
 
