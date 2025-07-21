@@ -64,7 +64,16 @@ export const useXmtpStore = create<XmtpStore>((set) => ({
   recipientInput: "",
   setRecipientInput: (input) => set({ recipientInput: input }),
   recipientAddress: "",
-  setRecipientAddress: (address) => set({ recipientAddress: address }),
+  setRecipientAddress: (address) => {
+    if (typeof address !== "string") {
+      console.error(
+        "NON-STRING PASSED TO SETRECIPIENTADDRESS",
+        typeof address,
+        address,
+      );
+    }
+    set({ recipientAddress: address });
+  },
   recipientName: "",
   setRecipientName: (name) => set({ recipientName: name }),
   recipientAvatar: "",
