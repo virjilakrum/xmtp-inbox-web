@@ -132,6 +132,7 @@ export const MessageInputController = memo(
               useXmtpStore
                 .getState()
                 .setConversationTopic(targetConversationId);
+              useXmtpStore.getState().setRecipientAddress(recipientAddress);
               console.log(
                 "✅ Enhanced conversation created:",
                 targetConversationId,
@@ -318,9 +319,11 @@ export const MessageInputController = memo(
         const enhancedConversation = conversation as EnhancedConversation;
         conversationId =
           enhancedConversation?.id || conversationTopic || "unknown";
-        peerAddr = enhancedConversation?.peerAddress || "unknown";
+        peerAddr =
+          enhancedConversation?.peerAddress || recipientAddress || "unknown";
       } else if (conversationTopic) {
         conversationId = conversationTopic;
+        peerAddr = recipientAddress || "unknown";
       }
 
       const details = {
