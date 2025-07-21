@@ -1,7 +1,7 @@
 import { useConversation, useConversations } from "./useV3Hooks";
 import { useXmtpStore } from "../store/xmtp";
 import { useMemo } from "react";
-import { CachedConversationWithId } from "../types/xmtpV3Types";
+import { EnhancedConversation } from "../types/xmtpV3Types";
 
 export const useSelectedConversation = () => {
   const { conversations } = useConversations();
@@ -21,22 +21,25 @@ export const useSelectedConversation = () => {
     }
 
     // Find the conversation by ID
-    const found = conversations.find((conv) => conv.id === conversationTopic);
+    const found = conversations.find(
+      (conv: EnhancedConversation) => conv.id === conversationTopic,
+    );
 
     if (found) {
       console.log("✅ Selected conversation found:", {
         id: found.id,
-        peerInboxId: found.peerInboxId,
+        peerAddress: found.peerAddress,
         hasLastMessage: !!found.lastMessage,
       });
 
-      // **FIX**: Return the found conversation directly since it should already be compatible
-      // The conversations from useConversations should already be in the correct format
-      return found as CachedConversationWithId;
+      // Return the found conversation directly since it's already EnhancedConversation
+      return found;
     } else {
       console.warn("⚠️ Selected conversation not found in list:", {
         conversationTopic,
-        availableConversations: conversations.map((c) => c.id),
+        availableConversations: conversations.map(
+          (c: EnhancedConversation) => c.id,
+        ),
       });
       return null;
     }

@@ -1,25 +1,33 @@
-import { useXmtpV3Context } from "../context/XmtpV3Provider";
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import useXmtpV3Client from "./useXmtpV3Client";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useXmtpStore } from "../store/xmtp";
-import { safeConvertTimestamp } from "../helpers";
+import useXmtpV3Client from "./useXmtpV3Client";
+import {
+  EnhancedConversation,
+  toEnhancedConversation,
+  isEnhancedConversation,
+} from "../types/xmtpV3Types";
+import { Client } from "@xmtp/browser-sdk";
 
-// Performance optimization: Memoized client hook
+// **PERFORMANCE**: Enhanced client hook with proper typing
 export const useClient = () => {
-  const context = useXmtpV3Context();
-  return context.client;
+  const clientState = useXmtpV3Client();
+  return clientState.client;
 };
 
-// Performance optimization: Enhanced conversations hook with caching
+// **PERFORMANCE**: Enhanced conversations hook with proper typing
 export const useConversations = () => {
   const client = useClient();
-  const [conversations, setConversations] = useState<any[]>([]);
+  const [conversations, setConversations] = useState<EnhancedConversation[]>(
+    [],
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [lastRefresh, setLastRefresh] = useState<number>(0);
 
   // Performance optimization: Cache conversations to avoid unnecessary re-fetches
-  const conversationsCache = useRef<Map<string, any>>(new Map());
+  const conversationsCache = useRef<Map<string, EnhancedConversation[]>>(
+    new Map(),
+  );
 
   const loadConversations = useCallback(
     async (forceRefresh = false) => {
@@ -27,7 +35,7 @@ export const useConversations = () => {
 
       // Performance optimization: Check cache first
       const now = Date.now();
-      const cacheKey = `conversations_${client.inboxId || "default"}`;
+      const cacheKey = `conversations_${(client as any).inboxId || "default"}`;
       const cached = conversationsCache.current.get(cacheKey);
 
       if (!forceRefresh && cached && now - lastRefresh < 30000) {
@@ -45,20 +53,54 @@ export const useConversations = () => {
         const startTime = Date.now();
 
         // V3 conversations.list() returns conversations in descending order by last message
-        const convos = await client.conversations.list();
+        const convos = await (client as any).conversations.list();
+
+        // **FIX**: Convert and enhance all conversations with proper typing
+        const enhancedConvos: EnhancedConversation[] = convos.map(
+          (convo: any) => {
+            try {
+              const enhanced = toEnhancedConversation(convo);
+
+              // **FIX**: Ensure peerAddress is properly set
+              if (!enhanced.peerAddress || enhanced.peerAddress === "unknown") {
+                const peerAddress =
+                  convo.peerInboxId || convo.peerAddress || null;
+                if (peerAddress) {
+                  enhanced.peerAddress = peerAddress;
+                  console.log("🔧 Enhanced conversation with peerAddress:", {
+                    conversationId: enhanced.id,
+                    peerAddress,
+                  });
+                }
+              }
+
+              return enhanced;
+            } catch (error) {
+              console.error("❌ Error enhancing conversation:", error, convo);
+              // Return a minimal valid conversation object
+              return {
+                id: convo.id || "unknown",
+                peerAddress:
+                  convo.peerAddress || convo.peerInboxId || "unknown",
+                isGroup: Boolean(convo.isGroup),
+                unreadCount: convo.unreadCount || 0,
+              };
+            }
+          },
+        );
 
         const endTime = Date.now();
         console.log("✅ Conversations loaded successfully", {
-          count: convos.length,
+          count: enhancedConvos.length,
           duration: endTime - startTime,
           cached: !forceRefresh,
         });
 
         // Update cache
-        conversationsCache.current.set(cacheKey, convos);
+        conversationsCache.current.set(cacheKey, enhancedConvos);
         setLastRefresh(now);
 
-        setConversations(convos);
+        setConversations(enhancedConvos);
         setError(null);
       } catch (err) {
         const error =
@@ -95,7 +137,7 @@ export const useConversations = () => {
     let stream: any;
     const startStream = async () => {
       try {
-        stream = await client.conversations.stream((newConvo: any) => {
+        stream = await (client as any).conversations.stream((newConvo: any) => {
           setConversations((prev) => {
             // Check for duplicates
             if (prev.some((c) => c.id === newConvo.id)) {
@@ -127,7 +169,7 @@ export const useConversations = () => {
           });
 
           // Update cache
-          const cacheKey = `conversations_${client.inboxId || "default"}`;
+          const cacheKey = `conversations_${(client as any).inboxId || "default"}`;
           const currentCache = conversationsCache.current.get(cacheKey) || [];
           if (!currentCache.some((c: any) => c.id === newConvo.id)) {
             conversationsCache.current.set(cacheKey, [
@@ -150,91 +192,86 @@ export const useConversations = () => {
     };
   }, [client, loadConversations]);
 
-  // Performance optimization: Memoized return value
-  return useMemo(
-    () => ({
-      conversations,
-      isLoading,
-      error,
-      refresh: () => loadConversations(true),
-      refreshIfStale: () => loadConversations(false),
-    }),
-    [conversations, isLoading, error, loadConversations],
-  );
+  // Performance optimization: Return conversations directly
+  return {
+    conversations,
+    isLoading,
+    error,
+    refresh: () => loadConversations(true),
+    refreshIfStale: () => loadConversations(false),
+  };
 };
 
-// Performance optimization: Enhanced canMessage hook with result caching
+// Performance optimization: Enhanced canMessage hook with caching
 export const useCanMessage = () => {
   const client = useClient();
   const resultCache = useRef<Map<string, boolean>>(new Map());
 
-  return {
-    canMessage: useCallback(
-      async (addresses: string[]): Promise<Record<string, boolean>> => {
-        if (!client) return {};
+  return useCallback(
+    async (addresses: string[]) => {
+      if (!client) {
+        console.warn("⚠️ Client not initialized for canMessage check");
+        return {};
+      }
 
-        const result: Record<string, boolean> = {};
-        const uncachedAddresses: string[] = [];
+      const result: Record<string, boolean> = {};
 
-        // Check cache first
-        addresses.forEach((address) => {
-          const cached = resultCache.current.get(address);
-          if (cached !== undefined) {
-            result[address] = cached;
-          } else {
-            uncachedAddresses.push(address);
+      // **PERFORMANCE**: Check cache first
+      const uncachedAddresses = addresses.filter(
+        (address) => !resultCache.current.has(address),
+      );
+
+      // Return cached results immediately
+      addresses.forEach((address) => {
+        if (resultCache.current.has(address)) {
+          result[address] = resultCache.current.get(address)!;
+        }
+      });
+
+      if (uncachedAddresses.length === 0) {
+        console.log("📦 Using cached canMessage results");
+        return result;
+      }
+
+      try {
+        console.log("🔄 Checking canMessage for:", uncachedAddresses);
+
+        // V3 uses identifiers instead of addresses
+        const identifiers = uncachedAddresses.map((address) => ({
+          identifierKind: "Ethereum" as const,
+          identifier: address,
+        }));
+
+        const canMessageResult = await (client as any).canMessage(identifiers);
+
+        // Convert Map to Record for compatibility and cache results
+        canMessageResult.forEach((canMessage: boolean, inboxId: string) => {
+          // Find corresponding address for this inbox ID
+          const index = Array.from(canMessageResult.keys()).indexOf(inboxId);
+          if (index >= 0 && uncachedAddresses[index]) {
+            const address = uncachedAddresses[index];
+            result[address] = canMessage;
+            resultCache.current.set(address, canMessage);
           }
         });
 
-        if (uncachedAddresses.length === 0) {
-          console.log("📦 All canMessage results from cache");
-          return result;
-        }
+        console.log("✅ canMessage results:", result);
+        return result;
+      } catch (error) {
+        console.error("❌ Error checking canMessage:", error);
 
-        try {
-          console.log(
-            "🔄 Checking canMessage for",
-            uncachedAddresses.length,
-            "addresses",
-          );
+        // Return cached results for failed addresses
+        uncachedAddresses.forEach((address) => {
+          if (result[address] === undefined) {
+            result[address] = false; // Default to false on error
+          }
+        });
 
-          // V3 uses identifiers instead of addresses
-          const identifiers = uncachedAddresses.map((address) => ({
-            identifierKind: "Ethereum" as const,
-            identifier: address,
-          }));
-
-          const canMessageResult = await client.canMessage(identifiers);
-
-          // Convert Map to Record for compatibility and cache results
-          canMessageResult.forEach((canMessage, inboxId) => {
-            // Find corresponding address for this inbox ID
-            const index = Array.from(canMessageResult.keys()).indexOf(inboxId);
-            if (index >= 0 && uncachedAddresses[index]) {
-              const address = uncachedAddresses[index];
-              result[address] = canMessage;
-              resultCache.current.set(address, canMessage);
-            }
-          });
-
-          console.log("✅ canMessage results:", result);
-          return result;
-        } catch (error) {
-          console.error("❌ Error checking canMessage:", error);
-
-          // Return cached results for failed addresses
-          uncachedAddresses.forEach((address) => {
-            if (result[address] === undefined) {
-              result[address] = false; // Default to false on error
-            }
-          });
-
-          return result;
-        }
-      },
-      [client],
-    ),
-  };
+        return result;
+      }
+    },
+    [client],
+  );
 };
 
 // Performance optimization: Enhanced sendMessage hook with optimistic UI and retry logic
@@ -278,7 +315,7 @@ export const useSendMessage = () => {
       setSendingMessages((prev) => new Set([...prev, messageKey]));
 
       // **FIX**: Enhanced validation - ensure we're not sending to ourselves
-      const clientAddress = client.inboxId;
+      const clientAddress = (client as any).inboxId;
       console.log("🚀 Enhanced message send validation:", {
         conversationId,
         clientAddress,
@@ -290,7 +327,7 @@ export const useSendMessage = () => {
         id: messageKey,
         conversationId,
         content,
-        senderAddress: client.inboxId || "unknown",
+        senderAddress: (client as any).inboxId || "unknown",
         sentAtNs: BigInt(Date.now() * 1000000),
         metadata: {
           id: messageKey,
@@ -335,8 +372,9 @@ export const useSendMessage = () => {
         // **FIX**: Enhanced conversation retrieval with error handling
         let conversation;
         try {
-          conversation =
-            await client.conversations.getConversationById(conversationId);
+          conversation = await (
+            client as any
+          ).conversations.getConversationById(conversationId);
           if (!conversation) throw new Error("Conversation not found");
         } catch (conversationError) {
           console.error("❌ Error getting conversation:", conversationError);
@@ -674,7 +712,7 @@ export const useStartConversation = () => {
       }
 
       // **FIX**: Validate that we're not trying to message ourselves
-      const clientAddress = client.inboxId;
+      const clientAddress = (client as any).inboxId;
       if (peerAddress.toLowerCase() === clientAddress?.toLowerCase()) {
         throw new Error("Cannot start conversation with yourself");
       }
@@ -713,7 +751,17 @@ export const useStartConversation = () => {
         let conversation;
         try {
           // V3 conversation creation - use newDm for direct messages
-          conversation = await client.conversations.newDm(peerAddress);
+          conversation = await (client as any).conversations.newDm(peerAddress);
+
+          // **FIX**: Ensure the conversation has the peerAddress property set
+          if (
+            (conversation && !("peerAddress" in conversation)) ||
+            !(conversation as any).peerAddress
+          ) {
+            // Add peerAddress to the conversation object
+            (conversation as any).peerAddress = peerAddress;
+            console.log("🔧 Added peerAddress to conversation:", peerAddress);
+          }
         } catch (conversationError) {
           console.error("❌ Error creating conversation:", conversationError);
           throw new Error(
@@ -722,15 +770,26 @@ export const useStartConversation = () => {
         }
 
         const endTime = Date.now();
+        const conversationPeerAddress =
+          "peerAddress" in conversation
+            ? (conversation as any).peerAddress
+            : peerAddress;
         console.log("✅ Conversation started successfully", {
           conversationId: conversation.id,
-          peerAddress,
+          peerAddress: conversationPeerAddress,
           clientAddress,
           duration: endTime - startTime,
           isSelf: peerAddress.toLowerCase() === clientAddress?.toLowerCase(),
         });
 
-        return { conversation, peerAddress };
+        // **FIX**: Return conversation with guaranteed peerAddress
+        return {
+          conversation: {
+            ...conversation,
+            peerAddress: conversationPeerAddress,
+          },
+          peerAddress,
+        };
       } catch (error) {
         console.error("❌ Error starting conversation:", error);
         throw error;
@@ -784,8 +843,9 @@ export const useConversation = () => {
         const startTime = Date.now();
 
         // V3 conversation.messages() to get all messages
-        const conversation =
-          await client.conversations.getConversationById(conversationTopic);
+        const conversation = await (
+          client as any
+        ).conversations.getConversationById(conversationTopic);
         if (!conversation) throw new Error("Conversation not found");
 
         const conversationMessages = await conversation.messages();
@@ -961,8 +1021,9 @@ export const useStreamAllMessages = () => {
         };
 
         // **PERFORMANCE**: Create stream with connection monitoring
-        streamHandle =
-          await client.conversations.streamAllMessages(messageCallback);
+        streamHandle = await (client as any).conversations.streamAllMessages(
+          messageCallback,
+        );
 
         setConnectionStatus("connected");
         reconnectAttempts = 0;

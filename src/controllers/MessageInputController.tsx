@@ -5,7 +5,7 @@ import { useStartConversation, useSendMessage } from "../hooks/useV3Hooks";
 import { useXmtpStore } from "../store/xmtp";
 import useSelectedConversation from "../hooks/useSelectedConversation";
 import type { Attachment } from "@xmtp/content-type-remote-attachment";
-import type { CachedConversationWithId } from "../types/xmtpV3Types";
+import type { EnhancedConversation } from "../types/xmtpV3Types";
 
 interface MessageInputControllerProps {
   attachment?: Attachment;
@@ -109,7 +109,7 @@ export const MessageInputController = memo(
           });
 
           // **PERFORMANCE**: Parallel conversation setup and validation
-          let targetConversation: CachedConversationWithId | any = conversation;
+          let targetConversation: EnhancedConversation | any = conversation;
           let targetConversationId = conversationTopic;
 
           // **PERFORMANCE**: Fast conversation creation if needed
@@ -308,24 +308,49 @@ export const MessageInputController = memo(
       ],
     );
 
-    console.log("🚀 Fast MessageInputController render:", {
-      hasConversation: !!conversation,
-      hasConversationTopic: !!conversationTopic,
-      recipientAddress,
-      hasError: !!inboxNotFoundError,
+    // **PERFORMANCE**: Enhanced conversation details logging
+    const conversationDetails = useMemo(() => {
+      // Safely access conversation properties with proper type handling
+      let conversationId = "unknown";
+      let peerAddr = "unknown";
+
+      if (conversation) {
+        const enhancedConversation = conversation as EnhancedConversation;
+        conversationId =
+          enhancedConversation?.id || conversationTopic || "unknown";
+        peerAddr = enhancedConversation?.peerAddress || "unknown";
+      } else if (conversationTopic) {
+        conversationId = conversationTopic;
+      }
+
+      const details = {
+        id: conversationId,
+        peerAddress: peerAddr,
+        topic: conversationTopic || "unknown",
+        hasConversation: Boolean(conversation),
+        hasConversationTopic: Boolean(conversationTopic),
+        hasError: Boolean(inboxNotFoundError),
+        hasValidConversation: hasValidConversation,
+        isProcessing,
+        isSending,
+        optimisticCount: optimisticMessages.size,
+        queuedCount,
+        recipientAddress: recipientAddress || "none",
+      };
+
+      console.log("Fast MessageInputController render:", details);
+      return details;
+    }, [
+      conversation,
+      conversationTopic,
+      inboxNotFoundError,
+      hasValidConversation,
       isProcessing,
       isSending,
+      optimisticMessages.size,
       queuedCount,
-      optimisticCount: optimisticMessages.size,
-      hasValidConversation,
-      conversationDetails: conversation
-        ? {
-            id: conversation.id,
-            peerAddress: conversation.peerAddress,
-            topic: conversation.topic,
-          }
-        : null,
-    });
+      recipientAddress,
+    ]);
 
     return (
       <>

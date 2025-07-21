@@ -3,7 +3,7 @@ import { useCanMessage } from "./useV3Hooks";
 import { isValidLongWalletAddress } from "../helpers";
 
 const useAddressInput = () => {
-  const { canMessage } = useCanMessage();
+  const canMessage = useCanMessage();
 
   const validateAddress = useCallback(
     async (address: string) => {

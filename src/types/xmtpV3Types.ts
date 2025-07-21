@@ -1,5 +1,79 @@
 import type { Client, Conversation } from "@xmtp/browser-sdk";
 
+// **XMTP V3 COMPATIBILITY**: Enhanced type definitions for XMTP V3
+export interface XmtpV3Conversation extends Omit<Conversation, "createdAtNs"> {
+  id: string;
+  peerAddress?: string;
+  peerInboxId?: string;
+  topic?: string;
+  createdAtNs?: bigint;
+  isGroup?: boolean;
+  lastMessage?: any;
+  unreadCount?: number;
+}
+
+// **COMPATIBILITY**: Enhanced conversation type that works with both V2 and V3
+export interface EnhancedConversation {
+  id: string;
+  peerAddress: string;
+  peerInboxId?: string;
+  topic?: string;
+  createdAtNs?: bigint;
+  isGroup: boolean;
+  lastMessage?: any;
+  unreadCount: number;
+  // Additional V3 properties
+  enhancedMetadata?: ConversationMetadata;
+  participantPresence?: { [userId: string]: UserPresence };
+  permissions?: {
+    canAddMembers: boolean;
+    canRemoveMembers: boolean;
+    canEditInfo: boolean;
+    canDeleteMessages: boolean;
+    canPin: boolean;
+  };
+  groupInfo?: {
+    name: string;
+    description?: string;
+    avatarUrl?: string;
+    adminIds: string[];
+    memberIds: string[];
+    inviteLink?: string;
+    settings: {
+      whoCanAddMembers: "admins" | "members";
+      whoCanEditInfo: "admins" | "members";
+      messagingEnabled: boolean;
+    };
+  };
+}
+
+// **UTILITY**: Type guard to check if object is a valid conversation
+export function isEnhancedConversation(obj: any): obj is EnhancedConversation {
+  return obj && typeof obj === "object" && typeof obj.id === "string";
+}
+
+// **UTILITY**: Convert any conversation object to EnhancedConversation
+export function toEnhancedConversation(convo: any): EnhancedConversation {
+  if (!convo || typeof convo !== "object") {
+    throw new Error("Invalid conversation object");
+  }
+
+  return {
+    id: convo.id || "unknown",
+    peerAddress: convo.peerAddress || convo.peerInboxId || "unknown",
+    peerInboxId: convo.peerInboxId,
+    topic: convo.topic,
+    createdAtNs: convo.createdAtNs,
+    isGroup: Boolean(convo.isGroup),
+    lastMessage: convo.lastMessage,
+    unreadCount: convo.unreadCount || 0,
+    enhancedMetadata: convo.enhancedMetadata,
+    participantPresence: convo.participantPresence,
+    permissions: convo.permissions,
+    groupInfo: convo.groupInfo,
+  };
+}
+
 // Base cached message interface
 export interface CachedMessage {
   id: string;
@@ -131,15 +205,9 @@ export interface UserPresence {
 }
 
 // Enhanced conversation with all metadata
-export interface CachedConversationWithId extends Conversation {
-  id: string;
-  peerAddress: string;
-  peerInboxId: string;
-  topic: string;
-  createdAtNs: bigint;
+export interface CachedConversationWithId extends EnhancedConversation {
   enhancedMetadata: ConversationMetadata;
   lastMessage?: CachedMessageWithId;
-  unreadCount: number;
   participantPresence: { [userId: string]: UserPresence };
   permissions: {
     canAddMembers: boolean;
