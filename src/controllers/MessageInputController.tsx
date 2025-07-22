@@ -48,8 +48,8 @@ export const MessageInputController = memo(
     >(new Map());
 
     // **PERFORMANCE**: Computed sending state
-    const isSending = sendingMessages.length > 0 || isProcessing;
-    const queuedCount = messageQueue.length;
+    const isSending = sendingMessages.size > 0 || isProcessing;
+    const queuedCount = messageQueue.size;
 
     // **PERFORMANCE**: Debounced validation
     const hasValidConversation = useMemo(() => {
@@ -186,7 +186,7 @@ export const MessageInputController = memo(
                 if (msg) {
                   newMap.set(optimisticId, {
                     ...msg,
-                    id: String(result.id || optimisticId),
+                    id: String(result.messageId || optimisticId),
                     status: "sent",
                   });
                 }

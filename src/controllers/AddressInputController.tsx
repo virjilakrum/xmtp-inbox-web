@@ -5,7 +5,10 @@ import { useSelectedConversation } from "../hooks/useSelectedConversation";
 import { useClient } from "../hooks/useV3Hooks";
 
 export const AddressInputController = () => {
-  const { messages, isLoading, error } = useConversation();
+  const conversationTopic = useXmtpStore((s) => s.conversationTopic);
+  const { messages, isLoading, error } = useConversation(
+    conversationTopic || "",
+  );
   const { conversation } = useSelectedConversation();
   const { consent } = useConsent();
   const client = useClient();

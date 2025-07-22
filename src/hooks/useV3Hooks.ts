@@ -379,16 +379,39 @@ export const useStreamAllMessages = () => {
   const client = useClient();
   const [messages, setMessages] = useState<any[]>([]);
   const [messageCount, setMessageCount] = useState(0);
+  const [error, setError] = useState<Error | null>(null);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<
+    "connecting" | "connected" | "disconnected" | "reconnecting"
+  >("disconnected");
+  const [metrics, setMetrics] = useState({
+    messagesReceived: 0,
+    avgLatency: 0,
+    connectionAttempts: 0,
+    lastMessage: "none",
+    status: "disconnected" as
+      | "connecting"
+      | "connected"
+      | "disconnected"
+      | "reconnecting",
+  });
 
   useEffect(() => {
     if (!client) return;
 
     const startStreaming = async () => {
       try {
+        setError(null);
+        setIsStreaming(true);
+        setConnectionStatus("connecting");
+
         console.log("🔄 XMTP V3 - Starting message stream...");
 
         // **XMTP V3**: Simple streaming approach
         const stream = await (client as any).conversations.streamAllMessages();
+
+        setConnectionStatus("connected");
+        setMetrics((prev) => ({ ...prev, status: "connected" }));
 
         if (stream && typeof stream[Symbol.asyncIterator] === "function") {
           for await (const message of stream) {
@@ -400,6 +423,11 @@ export const useStreamAllMessages = () => {
 
             setMessages((prev) => [...prev, message]);
             setMessageCount((prev) => prev + 1);
+            setMetrics((prev) => ({
+              ...prev,
+              messagesReceived: prev.messagesReceived + 1,
+              lastMessage: message.id || "unknown",
+            }));
 
             // Dispatch received event
             const receivedEvent = new CustomEvent("xmtp-message-received", {
@@ -412,13 +440,23 @@ export const useStreamAllMessages = () => {
         }
       } catch (error) {
         console.error("❌ XMTP V3 - Error in message stream:", error);
+        setError(error instanceof Error ? error : new Error("Stream error"));
+        setConnectionStatus("disconnected");
+        setIsStreaming(false);
       }
     };
 
     startStreaming();
   }, [client]);
 
-  return { messages, messageCount };
+  return {
+    messages,
+    messageCount,
+    error,
+    isStreaming,
+    connectionStatus,
+    metrics,
+  };
 };
 
 // **XMTP V3**: Consent management hook

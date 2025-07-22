@@ -61,14 +61,28 @@ export const MessagePreviewCardController = ({
   const isSelected = conversationTopic === convo.id; // V3 uses id instead of topic
 
   const onConvoClick = useCallback(
-    (conversation: CachedConversationWithId) => {
-      const peerAddress = conversation.peerAddress as ETHAddress; // Use peerAddress for compatibility
+    async (conversation: CachedConversationWithId) => {
+      // **XMTP V3**: Safely get peer address (could be async function despite typing)
+      let peerAddress: string;
+      const rawPeerAddress = (conversation as any).peerAddress;
+
+      if (typeof rawPeerAddress === "function") {
+        try {
+          peerAddress = await rawPeerAddress();
+        } catch (error) {
+          console.error("❌ Error getting peer address:", error);
+          peerAddress = conversation.peerInboxId || "unknown";
+        }
+      } else {
+        peerAddress = rawPeerAddress || conversation.peerInboxId || "unknown";
+      }
+
       if (recipientAddress !== peerAddress) {
         const avatar = getCachedPeerAddressAvatar(conversation);
         setRecipientAvatar(avatar || "");
         const name = getCachedPeerAddressName(conversation);
         setRecipientName(name || "");
-        setRecipientAddress(peerAddress);
+        setRecipientAddress(peerAddress); // Now guaranteed to be string
         setRecipientOnNetwork(true);
         setRecipientState("valid");
         setRecipientInput(peerAddress);
