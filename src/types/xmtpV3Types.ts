@@ -52,15 +52,36 @@ export function isEnhancedConversation(obj: any): obj is EnhancedConversation {
   return obj && typeof obj === "object" && typeof obj.id === "string";
 }
 
-// **UTILITY**: Convert any conversation object to EnhancedConversation
-export function toEnhancedConversation(convo: any): EnhancedConversation {
+// **UTILITY**: Convert any conversation object to EnhancedConversation (XMTP V3)
+export async function toEnhancedConversation(
+  convo: any,
+): Promise<EnhancedConversation> {
   if (!convo || typeof convo !== "object") {
     throw new Error("Invalid conversation object");
   }
 
+  // **XMTP V3**: peerAddress() is an async method
+  let peerAddress = "unknown";
+  try {
+    if (typeof convo.peerAddress === "function") {
+      peerAddress = await convo.peerAddress();
+    } else if (convo.peerInboxId) {
+      peerAddress = convo.peerInboxId;
+    } else if (typeof convo.peerAddress === "string") {
+      // Fallback for cases where it's already a string
+      peerAddress = convo.peerAddress;
+    }
+  } catch (error) {
+    console.warn(
+      "⚠️ Error getting peer address in toEnhancedConversation:",
+      error,
+    );
+    peerAddress = convo.peerInboxId || "unknown";
+  }
+
   return {
     id: convo.id || "unknown",
-    peerAddress: convo.peerAddress || convo.peerInboxId || "unknown",
+    peerAddress,
     peerInboxId: convo.peerInboxId,
     topic: convo.topic,
     createdAtNs: convo.createdAtNs,
